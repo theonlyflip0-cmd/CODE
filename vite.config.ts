@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS ? "/CODE/" : "/",
   plugins: [react()],
   resolve: {
     alias: {
