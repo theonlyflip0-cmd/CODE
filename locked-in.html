@@ -243,11 +243,15 @@ section { padding: var(--section-pad) 0; }
   .hero-grid { grid-template-columns: 1fr auto; align-items: center; }
 }
 .hero-copy { max-width: 680px; }
-.hero-headline { margin-bottom: 18px; }
-.hero-headline em {
-  font-style: normal;
-  color: var(--color-red);
+.hero-headline {
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.hero-headline span {
   display: block;
+  line-height: 0.88;
 }
 .hero-sub {
   max-width: 520px;
@@ -1056,7 +1060,10 @@ footer {
       <div class="hero-copy">
         <p class="eyebrow fade-in">Combat Athletes · 1:1 Coaching</p>
         <h1 class="display-xl hero-headline fade-in fade-in-delay-1">
-          Build Your<br><em>Competition-</em><br><em>Level</em><br>Gas Tank.
+          <span>Build Your</span>
+          <span class="red">Competition-</span>
+          <span class="red">Level</span>
+          <span>Gas Tank.</span>
         </h1>
         <p class="body-lg hero-sub fade-in fade-in-delay-2">
           Stop gassing in round two. The Locked In system — personalised strength, nutrition, weight cuts, and recovery — gets you dialled in and dominating from bell to bell.
