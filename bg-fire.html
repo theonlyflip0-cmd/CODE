@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fire Background — Locked In</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@800;900&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #020101; color: #F0EDE8; font-family: 'Barlow', sans-serif; overflow: hidden; height: 100vh; }
+
+#canvas { position: fixed; inset: 0; z-index: 0; }
+
+.demo-content {
+  position: relative; z-index: 1;
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+  padding: 0 clamp(24px, 8vw, 140px);
+}
+.demo-eyebrow {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+  font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: #ff6b35; margin-bottom: 20px;
+}
+.demo-headline {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+  font-size: clamp(56px, 10vw, 110px); line-height: 0.88;
+  text-transform: uppercase; letter-spacing: -0.01em;
+  margin-bottom: 28px;
+  text-shadow: 0 0 60px rgba(200,16,46,0.4);
+}
+.demo-headline em { font-style: normal; color: #C8102E; display: block; }
+.demo-sub {
+  font-size: clamp(15px, 1.8vw, 18px); color: #999;
+  max-width: 440px; line-height: 1.65; margin-bottom: 40px;
+}
+.demo-btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: #C8102E; color: #fff;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 17px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 18px 40px; border-radius: 2px;
+  transition: background 200ms ease, transform 100ms cubic-bezier(0.23,1,0.32,1);
+  cursor: pointer;
+}
+.demo-btn:active { transform: scale(0.97); }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div class="demo-content">
+  <p class="demo-eyebrow">1:1 Fight Performance Coaching</p>
+  <h1 class="demo-headline">Stop<br>Gassing<br><em>Out.</em></h1>
+  <p class="demo-sub">I build competition-level gas tanks for combat athletes — personalised strength, nutrition, and conditioning.</p>
+  <a href="#" class="demo-btn">Book Your Free Call →</a>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+const mouse = { x: canvas.width / 2, y: canvas.height };
+const vel = { x: 0, y: 0 };
+let lastX = mouse.x, lastY = mouse.y;
+
+document.addEventListener('mousemove', e => {
+  vel.x = e.clientX - lastX;
+  vel.y = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
+
+// ── FIRE PARTICLE SYSTEM ──────────────────────────────────────
+const PARTICLE_COUNT = 600;
+const particles = [];
+
+// Color stops for fire: white-hot core → yellow → orange → red → dark red → gone
+function fireColor(t, alpha) {
+  // t = 0 (birth/hot) → 1 (death/cool)
+  let r, g, b;
+  if (t < 0.15) {
+    // white-hot
+    r = 255; g = 240; b = 200;
+  } else if (t < 0.35) {
+    // yellow
+    const f = (t - 0.15) / 0.2;
+    r = 255; g = Math.round(240 - f * 130); b = Math.round(200 - f * 200);
+  } else if (t < 0.6) {
+    // orange
+    const f = (t - 0.35) / 0.25;
+    r = 255; g = Math.round(110 - f * 80); b = 0;
+  } else if (t < 0.8) {
+    // red
+    const f = (t - 0.6) / 0.2;
+    r = Math.round(255 - f * 75); g = Math.round(30 - f * 20); b = 0;
+  } else {
+    // deep red → fade out
+    const f = (t - 0.8) / 0.2;
+    r = Math.round(180 - f * 100); g = 10; b = 0;
+  }
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function spawnParticle(x, y) {
+  const spread = 60 + Math.random() * 80;
+  return {
+    x: x + (Math.random() - 0.5) * spread,
+    y: y + Math.random() * 20,
+    vx: (Math.random() - 0.5) * 1.2,
+    vy: -(Math.random() * 3.5 + 1.5),
+    life: 0,
+    maxLife: Math.random() * 80 + 40,
+    size: Math.random() * 28 + 10,
+    wobble: Math.random() * Math.PI * 2,
+    wobbleSpeed: (Math.random() - 0.5) * 0.12,
+  };
+}
+
+// Spawn sources: bottom edge + cursor
+function getSpawnSources() {
+  const sources = [];
+  // Row of sources along the bottom
+  const cols = Math.ceil(canvas.width / 55);
+  for (let i = 0; i < cols; i++) {
+    sources.push({
+      x: (i / cols) * canvas.width + Math.random() * 55,
+      y: canvas.height + 10,
+      weight: 1,
+    });
+  }
+  // Cursor as an additional fire source
+  if (mouse.y < canvas.height - 40) {
+    sources.push({ x: mouse.x, y: mouse.y, weight: 3 });
+  }
+  return sources;
+}
+
+// Init
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  const p = spawnParticle(
+    Math.random() * canvas.width,
+    canvas.height - Math.random() * canvas.height * 0.6
+  );
+  p.life = Math.random() * p.maxLife;
+  particles.push(p);
+}
+
+let frame = 0;
+
+function draw() {
+  frame++;
+
+  // Dark trail — semi-transparent fill for motion blur effect
+  ctx.fillStyle = 'rgba(2,1,1,0.25)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const sources = getSpawnSources();
+  const mouseSpeed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+
+  particles.forEach((p, idx) => {
+    p.life++;
+
+    if (p.life >= p.maxLife) {
+      // Respawn from a random source
+      const src = sources[Math.floor(Math.random() * sources.length)];
+      const fresh = spawnParticle(src.x, src.y);
+      Object.assign(particles[idx], fresh);
+      return;
+    }
+
+    const t = p.life / p.maxLife; // 0→1 age
+
+    // Wind from cursor velocity
+    p.vx += vel.x * 0.012;
+    p.vy += vel.y * 0.008;
+
+    // Cursor proximity — flames leap toward/around cursor
+    const dx = mouse.x - p.x;
+    const dy = mouse.y - p.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 200 && dist > 0) {
+      const pull = (1 - dist / 200) * 0.15;
+      p.vx += (dx / dist) * pull;
+      p.vy += (dy / dist) * pull * 0.5;
+    }
+
+    // Turbulent wobble
+    p.wobble += p.wobbleSpeed;
+    p.vx += Math.sin(p.wobble + frame * 0.04) * 0.12;
+
+    // Drag + gravity upward
+    p.vx *= 0.97;
+    p.vy *= 0.97;
+    p.vy -= 0.04; // flames naturally rise faster
+
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // Size: large near birth, tapers to a tip
+    const sizeCurve = t < 0.3
+      ? t / 0.3                        // grow in
+      : 1 - ((t - 0.3) / 0.7);        // shrink out
+    const size = p.size * sizeCurve;
+
+    // Alpha: full in middle, fade at birth and death
+    const alpha = t < 0.1
+      ? t / 0.1
+      : t > 0.75
+        ? (1 - t) / 0.25
+        : 1;
+
+    if (size < 0.5) return;
+
+    // Draw flame lick as a radial gradient blob
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, size);
+    grd.addColorStop(0,   fireColor(t, alpha * 0.95));
+    grd.addColorStop(0.4, fireColor(Math.min(1, t + 0.15), alpha * 0.7));
+    grd.addColorStop(1,   fireColor(Math.min(1, t + 0.3), 0));
+
+    ctx.beginPath();
+    // Stretch vertically to make it flame-shaped
+    ctx.ellipse(p.x, p.y, size * 0.55, size, 0, 0, Math.PI * 2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+  });
+
+  // Ambient glow at base
+  const baseGlow = ctx.createLinearGradient(0, canvas.height - 120, 0, canvas.height);
+  baseGlow.addColorStop(0, 'rgba(200,50,0,0.0)');
+  baseGlow.addColorStop(1, 'rgba(180,30,0,0.35)');
+  ctx.fillStyle = baseGlow;
+  ctx.fillRect(0, canvas.height - 120, canvas.width, 120);
+
+  // Cursor glow — fire blooms where you hover
+  if (mouse.y < canvas.height - 10) {
+    const cg = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 140 + mouseSpeed * 3);
+    cg.addColorStop(0, `rgba(255,120,20,${0.06 + mouseSpeed * 0.004})`);
+    cg.addColorStop(0.5, `rgba(200,16,46,${0.04})`);
+    cg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(mouse.x, mouse.y, 140 + mouseSpeed * 3, 0, Math.PI * 2);
+    ctx.fillStyle = cg;
+    ctx.fill();
+  }
+
+  // Subtle vignette to keep edges dark
+  const vig = ctx.createRadialGradient(
+    canvas.width/2, canvas.height/2, canvas.height * 0.25,
+    canvas.width/2, canvas.height/2, canvas.height * 0.85
+  );
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.65)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
