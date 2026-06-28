@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smoke Background — Locked In</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@800;900&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #060606; color: #F0EDE8; font-family: 'Barlow', sans-serif; overflow: hidden; height: 100vh; }
+#canvas { position: fixed; inset: 0; z-index: 0; }
+.demo-content {
+  position: relative; z-index: 1;
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+  padding: 0 clamp(24px, 8vw, 140px);
+}
+.demo-eyebrow {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+  font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: #C8102E; margin-bottom: 20px;
+}
+.demo-headline {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+  font-size: clamp(56px, 10vw, 110px); line-height: 0.88;
+  text-transform: uppercase; letter-spacing: -0.01em;
+  margin-bottom: 28px;
+}
+.demo-headline em { font-style: normal; color: #C8102E; display: block; }
+.demo-sub {
+  font-size: clamp(15px, 1.8vw, 18px); color: #aaa;
+  max-width: 440px; line-height: 1.65; margin-bottom: 40px;
+}
+.demo-btn {
+  display: inline-flex; align-items: center;
+  background: #C8102E; color: #fff;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 17px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 18px 40px; border-radius: 2px; cursor: pointer;
+  transition: background 200ms ease, transform 100ms cubic-bezier(0.23,1,0.32,1);
+  text-decoration: none;
+}
+.demo-btn:active { transform: scale(0.97); }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div class="demo-content">
+  <p class="demo-eyebrow">1:1 Fight Performance Coaching</p>
+  <h1 class="demo-headline">Stop<br>Gassing<br><em>Out.</em></h1>
+  <p class="demo-sub">I build competition-level gas tanks for combat athletes — personalised strength, nutrition, and conditioning.</p>
+  <a href="#" class="demo-btn">Book Your Free Call →</a>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+const mouse = { x: canvas.width / 2, y: canvas.height * 0.7 };
+const vel = { x: 0, y: 0 };
+let lastX = mouse.x, lastY = mouse.y;
+
+document.addEventListener('mousemove', e => {
+  vel.x = e.clientX - lastX;
+  vel.y = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
+
+// ── SMOKE PARTICLES ───────────────────────────────────────────
+const COUNT = 180;
+const particles = [];
+
+function spawn() {
+  // Spawn along the bottom third — like smoke rising off a mat/floor
+  const x = Math.random() * canvas.width;
+  const y = canvas.height * 0.75 + Math.random() * canvas.height * 0.3;
+  return {
+    x,
+    y,
+    ox: x,
+    vx: (Math.random() - 0.5) * 0.5,
+    vy: -(Math.random() * 0.7 + 0.2),
+    life: 0,
+    maxLife: Math.random() * 260 + 140,
+    // smoke puffs are large and grow as they rise
+    size: Math.random() * 60 + 30,
+    // random rotation for the ellipse
+    angle: Math.random() * Math.PI * 2,
+    rotSpeed: (Math.random() - 0.5) * 0.004,
+    // brightness: some wispy, some denser
+    brightness: Math.random() * 40 + 18,
+  };
+}
+
+for (let i = 0; i < COUNT; i++) {
+  const p = spawn();
+  p.life = Math.random() * p.maxLife;
+  particles.push(p);
+}
+
+let frame = 0;
+
+function draw() {
+  frame++;
+
+  // Very slow fade — smoke lingers
+  ctx.fillStyle = 'rgba(6,6,6,0.12)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const mouseSpeed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+
+  particles.forEach((p, idx) => {
+    p.life++;
+
+    if (p.life >= p.maxLife) {
+      Object.assign(particles[idx], spawn());
+      return;
+    }
+
+    const t = p.life / p.maxLife; // 0 → 1
+
+    // Cursor interaction — smoke parts around cursor like it's being blown
+    const dx = p.x - mouse.x;
+    const dy = p.y - mouse.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const pushRadius = 200 + mouseSpeed * 4;
+
+    if (dist < pushRadius && dist > 0) {
+      const force = (1 - dist / pushRadius) * (0.4 + mouseSpeed * 0.06);
+      p.vx += (dx / dist) * force;
+      p.vy += (dy / dist) * force * 0.6;
+    }
+
+    // Wind from mouse movement fans the smoke
+    p.vx += vel.x * 0.006;
+    p.vy += vel.y * 0.004;
+
+    // Gentle turbulence
+    p.vx += Math.sin(frame * 0.012 + p.ox * 0.01) * 0.06;
+    p.vy += Math.cos(frame * 0.008 + p.ox * 0.008) * 0.03;
+
+    // Drag — smoke is slow
+    p.vx *= 0.985;
+    p.vy *= 0.985;
+    p.angle += p.rotSpeed;
+
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // Size grows as it rises and dissipates
+    const growFactor = 1 + t * 2.2;
+    const size = p.size * growFactor;
+
+    // Alpha: fade in slowly, hold, fade out
+    let alpha;
+    if (t < 0.15) {
+      alpha = t / 0.15;
+    } else if (t > 0.65) {
+      alpha = (1 - t) / 0.35;
+    } else {
+      alpha = 1;
+    }
+    alpha *= 0.13; // smoke is never opaque — keep it wispy
+
+    const b = p.brightness;
+
+    // Draw as a rotated soft ellipse gradient
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.angle);
+
+    const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, size);
+    grd.addColorStop(0,   `rgba(${b+12},${b+12},${b+12},${alpha})`);
+    grd.addColorStop(0.5, `rgba(${b},${b},${b},${alpha * 0.6})`);
+    grd.addColorStop(1,   `rgba(${b},${b},${b},0)`);
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, size * 0.7, size, 0, 0, Math.PI * 2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+
+    ctx.restore();
+  });
+
+  // Ground haze — thick band at the bottom
+  const haze = ctx.createLinearGradient(0, canvas.height * 0.65, 0, canvas.height);
+  haze.addColorStop(0, 'rgba(22,22,22,0)');
+  haze.addColorStop(0.5, 'rgba(18,18,18,0.25)');
+  haze.addColorStop(1, 'rgba(10,10,10,0.7)');
+  ctx.fillStyle = haze;
+  ctx.fillRect(0, canvas.height * 0.65, canvas.width, canvas.height * 0.35);
+
+  // Subtle red tint near cursor — the one pop of colour
+  const cg = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 220);
+  cg.addColorStop(0, `rgba(200,16,46,${0.04 + mouseSpeed * 0.002})`);
+  cg.addColorStop(1, 'rgba(200,16,46,0)');
+  ctx.beginPath();
+  ctx.arc(mouse.x, mouse.y, 220, 0, Math.PI * 2);
+  ctx.fillStyle = cg;
+  ctx.fill();
+
+  // Vignette — keep corners very dark
+  const vig = ctx.createRadialGradient(
+    canvas.width / 2, canvas.height / 2, canvas.height * 0.2,
+    canvas.width / 2, canvas.height / 2, canvas.height * 0.9
+  );
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.75)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
