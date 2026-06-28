@@ -280,23 +280,63 @@ section { padding: var(--section-pad) 0; }
   flex-shrink: 0;
 }
 
-/* Octagon SVG */
-.hero-octagon {
-  width: clamp(220px, 35vw, 380px);
-  height: clamp(220px, 35vw, 380px);
-  opacity: 0.07;
+/* Result Cards */
+.hero-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   flex-shrink: 0;
+  width: clamp(240px, 28vw, 320px);
 }
 @media (max-width: 767px) {
-  .hero-octagon {
-    position: absolute;
-    right: -40px;
-    bottom: 40px;
-    width: 200px;
-    height: 200px;
-    opacity: 0.04;
-  }
+  .hero-cards { width: 100%; max-width: 360px; }
 }
+.result-card {
+  background: #0e0e0e;
+  border: 1px solid var(--color-border);
+  border-left: 2px solid var(--color-red);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  opacity: 0;
+  transform: translateX(16px);
+  transition: opacity 500ms var(--ease-out), transform 500ms var(--ease-out);
+}
+.result-card.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+.result-card-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.result-card-result {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(18px, 2.5vw, 22px);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: var(--color-white);
+  line-height: 1.1;
+}
+.result-card-result em {
+  font-style: normal;
+  color: var(--color-red);
+}
+.result-card-tag {
+  font-size: 12px;
+  color: var(--color-muted);
+  font-weight: 500;
+}
+.result-card-delay-1 { transition-delay: 200ms; }
+.result-card-delay-2 { transition-delay: 380ms; }
+.result-card-delay-3 { transition-delay: 540ms; }
+.result-card-delay-4 { transition-delay: 700ms; }
 
 /* ─────────────────────────────────────────
    PAIN POINTS
@@ -879,7 +919,7 @@ footer {
   <div class="container">
     <div class="sticky-inner">
       <p class="sticky-copy">Limited spots — applications close Friday</p>
-      <a href="#cta-final" class="btn-primary">Book Your Free Call</a>
+      <a href="https://tally.so/r/LZ74oj" target="_blank" rel="noopener" class="btn-primary">Apply: Lock In</a>
     </div>
   </div>
 </div>
@@ -903,57 +943,56 @@ footer {
   <div class="container">
     <div class="hero-grid">
       <div class="hero-copy">
-        <p class="eyebrow fade-in">1:1 Fight Performance Coaching</p>
+        <p class="eyebrow fade-in">Combat Athletes · 1:1 Coaching</p>
         <h1 class="display-xl hero-headline fade-in fade-in-delay-1">
-          Stop<br>Gassing<br><em>Out.</em><br>Start<br>Dominating.
+          Build Your<br><em>Competition-</em><br><em>Level</em><br>Gas Tank.
         </h1>
         <p class="body-lg hero-sub fade-in fade-in-delay-2">
-          I build competition-level gas tanks for combat athletes — personalised strength, nutrition, weight cuts, and recovery programming so you're throwing just as hard in round 3 as round 1.
+          Stop gassing in round two. The Locked In system — personalised strength, nutrition, weight cuts, and recovery — gets you dialled in and dominating from bell to bell.
         </p>
         <div class="hero-cta-group fade-in fade-in-delay-3">
-          <a href="#cta-final" class="btn-primary">Book Your Free Strategy Call →</a>
-          <a href="#proof" class="btn-secondary">See Results</a>
+          <a href="https://tally.so/r/LZ74oj" target="_blank" rel="noopener" class="btn-primary">Apply: Lock In →</a>
+          <a href="https://stan.store/LockedInPerformance" target="_blank" rel="noopener" class="btn-secondary">Free Programs</a>
         </div>
         <div class="hero-trust fade-in fade-in-delay-4">
           <span class="trust-item">
             <svg class="trust-icon" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0l2 5h5l-4 3 1.5 5L8 10l-4.5 3 1.5-5-4-3h5z"/></svg>
-            100+ athletes coached
+            100+ athletes dialled in
           </span>
           <span class="trust-item">
             <svg class="trust-icon" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0l2 5h5l-4 3 1.5 5L8 10l-4.5 3 1.5-5-4-3h5z"/></svg>
-            King in the Ring finalist
+            King in the Ring — 4 fights one night
           </span>
           <span class="trust-item">
             <svg class="trust-icon" fill="currentColor" viewBox="0 0 16 16"><path d="M8 0l2 5h5l-4 3 1.5 5L8 10l-4.5 3 1.5-5-4-3h5z"/></svg>
-            MMA, boxing, kickboxing, Muay Thai
+            MMA · Boxing · Kickboxing · Muay Thai
           </span>
         </div>
       </div>
 
-      <!-- Octagon SVG -->
-      <svg class="hero-octagon" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-          <style>
-            .oct-line { stroke: #C8102E; stroke-width: 1; }
-          </style>
-        </defs>
-        <!-- Concentric octagons -->
-        <polygon class="oct-line" points="150,20 230,50 280,130 280,170 230,250 150,280 70,250 20,170 20,130 70,50"/>
-        <polygon class="oct-line" points="150,46 216,70 256,130 256,170 216,230 150,254 84,230 44,170 44,130 84,70"/>
-        <polygon class="oct-line" points="150,72 202,90 232,130 232,170 202,210 150,228 98,210 68,170 68,130 98,90"/>
-        <polygon class="oct-line" points="150,98 188,110 208,130 208,170 188,190 150,202 112,190 92,170 92,130 112,110"/>
-        <polygon class="oct-line" points="150,124 174,130 184,150 174,170 150,176 126,170 116,150 126,130"/>
-        <!-- Radial lines -->
-        <line class="oct-line" x1="150" y1="20" x2="150" y2="280"/>
-        <line class="oct-line" x1="20" y1="150" x2="280" y2="150"/>
-        <line class="oct-line" x1="70" y1="50" x2="230" y2="250"/>
-        <line class="oct-line" x1="230" y1="50" x2="70" y2="250"/>
-        <line class="oct-line" x1="20" y1="130" x2="280" y2="170"/>
-        <line class="oct-line" x1="20" y1="170" x2="280" y2="130"/>
-        <line class="oct-line" x1="130" y1="20" x2="170" y2="280"/>
-        <line class="oct-line" x1="170" y1="20" x2="130" y2="280"/>
-        <circle cx="150" cy="150" r="4" fill="#C8102E"/>
-      </svg>
+      <!-- Result Cards -->
+      <div class="hero-cards">
+        <div class="result-card result-card-delay-1">
+          <span class="result-card-name">Arshia</span>
+          <div class="result-card-result">85kg <em>→</em> 77kg<br>in 3 weeks</div>
+          <span class="result-card-tag">Fight-week weight cut · full rehydration</span>
+        </div>
+        <div class="result-card result-card-delay-2">
+          <span class="result-card-name">Kane W.</span>
+          <div class="result-card-result"><em>TKO</em> finish<br>Round 3</div>
+          <span class="result-card-tag">Was gassing in rd 2 · 6-month camp</span>
+        </div>
+        <div class="result-card result-card-delay-3">
+          <span class="result-card-name">Jesse King</span>
+          <div class="result-card-result">Dominated<br><em>all 3 rounds</em></div>
+          <span class="result-card-tag">High performance fight camp</span>
+        </div>
+        <div class="result-card result-card-delay-4">
+          <span class="result-card-name">Dylan</span>
+          <div class="result-card-result"><em>Pro debut</em><br>fight-ready</div>
+          <span class="result-card-tag">Strength + conditioning + nutrition</span>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -1458,8 +1497,8 @@ footer {
     <p class="cta-sub fade-in fade-in-delay-2">
       Book a free 30-minute strategy call. We'll talk through your next fight, your current programme, and whether this is the right fit. No obligation.
     </p>
-    <a href="https://calendly.com/coachdenzy" class="btn-cta-white fade-in fade-in-delay-3" target="_blank" rel="noopener">
-      Book Your Free Call →
+    <a href="https://tally.so/r/LZ74oj" class="btn-cta-white fade-in fade-in-delay-3" target="_blank" rel="noopener">
+      Apply: Lock In →
     </a>
     <p class="cta-fine fade-in fade-in-delay-4">Spots are limited. Applications close Friday.</p>
   </div>
@@ -1521,6 +1560,23 @@ footer {
       { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
     );
     fadeEls.forEach((el) => fadeObserver.observe(el));
+  }
+
+  // Result cards — slide in from right on load
+  const cards = document.querySelectorAll('.result-card');
+  if (cards.length > 0) {
+    const cardObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            cardObserver.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+    cards.forEach((c) => cardObserver.observe(c));
   }
 
   // FAQ accordion
