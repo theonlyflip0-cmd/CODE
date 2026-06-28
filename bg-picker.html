@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Background Picker — Locked In</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@800;900&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #050505; color: #F0EDE8; font-family: 'Barlow', sans-serif; overflow-x: hidden; }
+
+/* ── PICKER UI ── */
+#picker {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  background: rgba(5,5,5,0.92); backdrop-filter: blur(12px);
+  border-bottom: 1px solid #1e1e1e;
+  padding: 12px 0;
+}
+.picker-inner {
+  max-width: 900px; margin: 0 auto; padding: 0 24px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.picker-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800; font-size: 13px; letter-spacing: 0.15em;
+  text-transform: uppercase; color: #C8102E; margin-right: 4px;
+  white-space: nowrap;
+}
+.option-btn {
+  background: #111; border: 1px solid #2a2a2a; color: #aaa;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+  font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 8px 18px; border-radius: 2px; cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+  white-space: nowrap;
+}
+.option-btn:hover { border-color: #555; color: #fff; }
+.option-btn.active { border-color: #C8102E; color: #fff; background: rgba(200,16,46,0.12); }
+
+/* ── FULLSCREEN CANVASES ── */
+.bg-canvas {
+  display: none;
+  position: fixed; inset: 0; z-index: 0;
+}
+.bg-canvas.active { display: block; }
+
+/* ── DEMO CONTENT ── */
+.demo-content {
+  position: relative; z-index: 1;
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+  padding: 120px clamp(24px, 8vw, 140px) 80px;
+  pointer-events: none;
+}
+.demo-eyebrow {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+  font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: #C8102E; margin-bottom: 20px;
+}
+.demo-headline {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 900;
+  font-size: clamp(56px, 10vw, 110px); line-height: 0.88;
+  text-transform: uppercase; letter-spacing: -0.01em;
+  margin-bottom: 28px; max-width: 700px;
+}
+.demo-headline em { font-style: normal; color: #C8102E; display: block; }
+.demo-sub {
+  font-size: clamp(15px, 1.8vw, 18px); color: #999;
+  max-width: 440px; line-height: 1.65; margin-bottom: 40px;
+}
+.demo-btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: #C8102E; color: #fff;
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+  font-size: 17px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 18px 40px; border-radius: 2px; pointer-events: all;
+  transition: background 200ms ease, transform 100ms cubic-bezier(0.23,1,0.32,1);
+}
+.demo-btn:active { transform: scale(0.97); }
+</style>
+</head>
+<body>
+
+<!-- PICKER BAR -->
+<div id="picker">
+  <div class="picker-inner">
+    <span class="picker-label">Pick a background →</span>
+    <button class="option-btn active" data-bg="particles">A · Particle Web</button>
+    <button class="option-btn" data-bg="smoke">B · Smoke & Fog</button>
+    <button class="option-btn" data-bg="grid">C · Grid Distortion</button>
+    <button class="option-btn" data-bg="aurora">D · Dark Aurora</button>
+  </div>
+</div>
+
+<!-- CANVAS LAYERS -->
+<canvas id="canvas-particles" class="bg-canvas active"></canvas>
+<canvas id="canvas-smoke" class="bg-canvas"></canvas>
+<canvas id="canvas-grid" class="bg-canvas"></canvas>
+<canvas id="canvas-aurora" class="bg-canvas"></canvas>
+
+<!-- SAMPLE CONTENT -->
+<div class="demo-content">
+  <p class="demo-eyebrow">1:1 Fight Performance Coaching</p>
+  <h1 class="demo-headline">Stop<br>Gassing<br><em>Out.</em></h1>
+  <p class="demo-sub">I build competition-level gas tanks for combat athletes — personalised strength, nutrition, and conditioning.</p>
+  <a href="#" class="demo-btn">Book Your Free Call →</a>
+</div>
+
+<script>
+// ── SHARED ──────────────────────────────────────────────────────
+const mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+document.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+
+function resize(canvas) {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+// ── A: PARTICLE WEB ─────────────────────────────────────────────
+(function particleWeb() {
+  const canvas = document.getElementById('canvas-particles');
+  const ctx = canvas.getContext('2d');
+  resize(canvas);
+  window.addEventListener('resize', () => resize(canvas));
+
+  const COUNT = 110;
+  const CONNECT_DIST = 140;
+  const CURSOR_RADIUS = 160;
+  const RED = '#C8102E';
+
+  const particles = Array.from({ length: COUNT }, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    vx: (Math.random() - 0.5) * 0.4,
+    vy: (Math.random() - 0.5) * 0.4,
+    r: Math.random() * 1.5 + 0.5,
+  }));
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#070707';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+      if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+      // cursor attraction
+      const dx = mouse.x - p.x, dy = mouse.y - p.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < CURSOR_RADIUS) {
+        const f = (1 - dist / CURSOR_RADIUS) * 0.015;
+        p.vx += dx * f; p.vy += dy * f;
+        const speed = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
+        if (speed > 2) { p.vx = p.vx/speed*2; p.vy = p.vy/speed*2; }
+      }
+
+      const nearCursor = dist < CURSOR_RADIUS;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, nearCursor ? p.r * 2 : p.r, 0, Math.PI * 2);
+      ctx.fillStyle = nearCursor ? RED : 'rgba(240,237,232,0.55)';
+      ctx.fill();
+
+      for (let j = i + 1; j < particles.length; j++) {
+        const q = particles[j];
+        const ex = p.x - q.x, ey = p.y - q.y;
+        const ed = Math.sqrt(ex*ex + ey*ey);
+        if (ed < CONNECT_DIST) {
+          const alpha = (1 - ed / CONNECT_DIST) * 0.35;
+          const bothNear = dist < CURSOR_RADIUS && Math.sqrt((mouse.x-q.x)**2+(mouse.y-q.y)**2) < CURSOR_RADIUS;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
+          ctx.strokeStyle = bothNear
+            ? `rgba(200,16,46,${alpha * 1.8})`
+            : `rgba(240,237,232,${alpha})`;
+          ctx.lineWidth = bothNear ? 1 : 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── B: SMOKE / FOG ──────────────────────────────────────────────
+(function smoke() {
+  const canvas = document.getElementById('canvas-smoke');
+  const ctx = canvas.getContext('2d');
+  resize(canvas);
+  window.addEventListener('resize', () => resize(canvas));
+
+  const blobs = Array.from({ length: 18 }, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    r: Math.random() * 260 + 100,
+    vx: (Math.random() - 0.5) * 0.25,
+    vy: (Math.random() - 0.5) * 0.25,
+    phase: Math.random() * Math.PI * 2,
+    red: Math.random() < 0.2,
+  }));
+
+  let t = 0;
+  function draw() {
+    t += 0.003;
+    ctx.fillStyle = '#060606';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    blobs.forEach(b => {
+      b.x += b.vx + Math.sin(t + b.phase) * 0.3;
+      b.y += b.vy + Math.cos(t + b.phase * 1.3) * 0.3;
+      if (b.x < -b.r) b.x = canvas.width + b.r;
+      if (b.x > canvas.width + b.r) b.x = -b.r;
+      if (b.y < -b.r) b.y = canvas.height + b.r;
+      if (b.y > canvas.height + b.r) b.y = -b.r;
+
+      // cursor push
+      const dx = b.x - mouse.x, dy = b.y - mouse.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 220) {
+        const f = (1 - dist/220) * 1.2;
+        b.x += dx/dist * f;
+        b.y += dy/dist * f;
+      }
+
+      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+      if (b.red) {
+        g.addColorStop(0, 'rgba(200,16,46,0.055)');
+        g.addColorStop(1, 'rgba(200,16,46,0)');
+      } else {
+        g.addColorStop(0, 'rgba(30,30,35,0.5)');
+        g.addColorStop(1, 'rgba(6,6,6,0)');
+      }
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+      ctx.fillStyle = g;
+      ctx.fill();
+    });
+
+    // red cursor glow
+    const cg = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 180);
+    cg.addColorStop(0, 'rgba(200,16,46,0.08)');
+    cg.addColorStop(1, 'rgba(200,16,46,0)');
+    ctx.beginPath();
+    ctx.arc(mouse.x, mouse.y, 180, 0, Math.PI*2);
+    ctx.fillStyle = cg;
+    ctx.fill();
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── C: GRID DISTORTION ──────────────────────────────────────────
+(function grid() {
+  const canvas = document.getElementById('canvas-grid');
+  const ctx = canvas.getContext('2d');
+  resize(canvas);
+  window.addEventListener('resize', () => resize(canvas));
+
+  const SPACING = 52;
+  let t = 0;
+
+  function draw() {
+    t += 0.008;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#060606';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const cols = Math.ceil(canvas.width / SPACING) + 2;
+    const rows = Math.ceil(canvas.height / SPACING) + 2;
+
+    for (let r = 0; r <= rows; r++) {
+      ctx.beginPath();
+      for (let c = 0; c <= cols; c++) {
+        const bx = c * SPACING;
+        const by = r * SPACING;
+        const dx = bx - mouse.x, dy = by - mouse.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const strength = Math.max(0, 1 - dist / 200);
+        const wave = Math.sin(dist * 0.04 - t * 2.5) * strength * 14;
+        const nx = bx + (dx / (dist || 1)) * wave;
+        const ny = by + (dy / (dist || 1)) * wave;
+        const alpha = 0.05 + strength * 0.25;
+        if (c === 0) ctx.moveTo(nx, ny);
+        else ctx.lineTo(nx, ny);
+      }
+      ctx.strokeStyle = `rgba(200,16,46,0.15)`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    for (let c = 0; c <= cols; c++) {
+      ctx.beginPath();
+      for (let r = 0; r <= rows; r++) {
+        const bx = c * SPACING;
+        const by = r * SPACING;
+        const dx = bx - mouse.x, dy = by - mouse.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const strength = Math.max(0, 1 - dist / 200);
+        const wave = Math.sin(dist * 0.04 - t * 2.5) * strength * 14;
+        const nx = bx + (dx / (dist || 1)) * wave;
+        const ny = by + (dy / (dist || 1)) * wave;
+        if (r === 0) ctx.moveTo(nx, ny);
+        else ctx.lineTo(nx, ny);
+      }
+      ctx.strokeStyle = `rgba(200,16,46,0.15)`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    // cursor dot
+    ctx.beginPath();
+    ctx.arc(mouse.x, mouse.y, 4, 0, Math.PI*2);
+    ctx.fillStyle = '#C8102E';
+    ctx.fill();
+
+    const cg = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 200);
+    cg.addColorStop(0, 'rgba(200,16,46,0.07)');
+    cg.addColorStop(1, 'rgba(200,16,46,0)');
+    ctx.beginPath();
+    ctx.arc(mouse.x, mouse.y, 200, 0, Math.PI*2);
+    ctx.fillStyle = cg;
+    ctx.fill();
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── D: DARK AURORA ──────────────────────────────────────────────
+(function aurora() {
+  const canvas = document.getElementById('canvas-aurora');
+  const ctx = canvas.getContext('2d');
+  resize(canvas);
+  window.addEventListener('resize', () => resize(canvas));
+
+  const layers = [
+    { y: 0.35, amp: 0.12, speed: 0.0008, phase: 0,   color: [200,16,46],   a: 0.28 },
+    { y: 0.55, amp: 0.08, speed: 0.0012, phase: 2.1, color: [60,10,20],    a: 0.5  },
+    { y: 0.45, amp: 0.1,  speed: 0.001,  phase: 4.3, color: [180,10,35],   a: 0.18 },
+    { y: 0.65, amp: 0.07, speed: 0.0006, phase: 1.1, color: [90,5,18],     a: 0.4  },
+    { y: 0.28, amp: 0.09, speed: 0.0015, phase: 3.5, color: [130,8,26],    a: 0.15 },
+  ];
+
+  let t = 0;
+  const smoothMouse = { x: window.innerWidth/2, y: window.innerHeight/2 };
+
+  function draw() {
+    t++;
+    smoothMouse.x += (mouse.x - smoothMouse.x) * 0.04;
+    smoothMouse.y += (mouse.y - smoothMouse.y) * 0.04;
+
+    ctx.fillStyle = '#040404';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const cursorInfluence = (smoothMouse.y / canvas.height - 0.5) * 0.15;
+
+    layers.forEach(l => {
+      const W = canvas.width;
+      const H = canvas.height;
+      const baseY = (l.y + cursorInfluence * 0.6) * H;
+      const mouseX = (smoothMouse.x / W - 0.5) * 80;
+
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      const steps = 80;
+      for (let i = 0; i <= steps; i++) {
+        const x = (i / steps) * W;
+        const nx = x / W;
+        const wave = Math.sin(nx * 3.5 + t * l.speed * 1000 + l.phase) * l.amp * H
+                   + Math.sin(nx * 7 + t * l.speed * 700 + l.phase * 1.7) * l.amp * 0.4 * H
+                   + Math.sin((nx + mouseX/W * 0.3) * 2 + t * l.speed * 500) * 30;
+        ctx.lineTo(x, baseY + wave);
+      }
+      ctx.lineTo(W, H);
+      ctx.closePath();
+
+      const [r, g, b] = l.color;
+      const grad = ctx.createLinearGradient(0, baseY - l.amp*H, 0, baseY + l.amp*H*2);
+      grad.addColorStop(0, `rgba(${r},${g},${b},${l.a})`);
+      grad.addColorStop(0.5, `rgba(${r},${g},${b},${l.a * 0.6})`);
+      grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    });
+
+    // subtle vignette
+    const vig = ctx.createRadialGradient(canvas.width/2, canvas.height/2, canvas.height*0.2, canvas.width/2, canvas.height/2, canvas.height*0.9);
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(0,0,0,0.7)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── SWITCHER ────────────────────────────────────────────────────
+document.querySelectorAll('.option-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.option-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.bg-canvas').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('canvas-' + btn.dataset.bg).classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
