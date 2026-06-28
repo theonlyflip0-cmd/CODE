@@ -778,11 +778,11 @@ section { padding: var(--section-pad) 0; }
 /* ─────────────────────────────────────────
    FAQ
 ───────────────────────────────────────── */
-#faq { }
+#faq { background: #0a0a0a; position: relative; z-index: 1; }
 .faq-header { margin-bottom: 48px; }
 .faq-list { max-width: 720px; }
 .faq-item {
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #2a2a2a;
 }
 .faq-question {
   width: 100%;
@@ -794,10 +794,10 @@ section { padding: var(--section-pad) 0; }
   padding: 24px 0;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(16px, 2.5vw, 19px);
+  font-size: clamp(17px, 2.5vw, 21px);
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  color: var(--color-white);
+  color: #F0EDE8;
   transition: color 200ms ease;
 }
 @media (hover: hover) and (pointer: fine) {
