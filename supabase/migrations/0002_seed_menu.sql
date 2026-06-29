@@ -41,9 +41,11 @@ values
   ('cola',                  'Cola',                 'Coke',          null, null, 2.50, 'dranken', 1, false, true),
   ('cola-zero',             'Cola Zero',            'Coke Zero',     null, null, 2.50, 'dranken', 2, false, true),
   ('fanta',                 'Fanta Orange',         'Fanta Orange',  null, null, 2.50, 'dranken', 3, false, true),
-  ('ayran',                 'Ayran',                'Ayran',         null, null, 2.00, 'dranken', 4, false, true),
-  ('ayran-raibi-pistache',  'Ayran Raïbi Pistache', 'Ayran Raïbi Pistachio', null, null, 2.50, 'dranken', 5, false, false),
-  ('water',                 'Water',                'Water',         null, null, 2.00, 'dranken', 6, false, true),
+  ('water',                 'Munzur Water 0,5L',    'Munzur Water 0.5L', 'Natuurlijk bronwater.', 'Natural spring water.', 2.00, 'dranken', 4, false, true),
+  ('ayran',                 'Yayık Ayran',          'Yayık Ayran',   'Romige yoghurtdrank, 250 ml.', 'Creamy yoghurt drink, 250 ml.', 2.00, 'dranken', 5, false, true),
+  ('ayran-kers',            'Ayran Kers',           'Cherry Ayran',  'Yoghurtdrank met kers, 250 ml.', 'Cherry yoghurt drink, 250 ml.', 2.50, 'dranken', 6, false, true),
+  ('ayran-raibi-pistache',  'Raïbi Pistache',       'Raïbi Pistachio', 'Kefir-yoghurtdrank met pistache, 250 ml.', 'Kefir yoghurt drink with pistachio, 250 ml.', 2.50, 'dranken', 7, false, true),
+  ('raibi-granaatappel',    'Raïbi Granaatappel',   'Raïbi Pomegranate', 'Kefir-yoghurtdrank met granaatappel, 250 ml.', 'Kefir yoghurt drink with pomegranate, 250 ml.', 2.50, 'dranken', 8, false, true),
 
   -- sauzen --------------------------------------------------------------------
   ('knoflooksaus', 'Knoflooksaus', 'Garlic Sauce', null, null, 1.00, 'sauzen', 1, false, true),

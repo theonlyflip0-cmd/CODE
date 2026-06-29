@@ -213,11 +213,25 @@ export const SPICY_SLUGS = new Set<string>([
 ]);
 
 /**
- * Map of slug -> real photo URL. Real photography lives outside the repo, so
- * this is intentionally sparse; everything else falls back to a generated,
- * category-tinted placeholder.
+ * Map of slug -> real photo URL, built automatically from any image dropped in
+ * `src/assets/products/`. Name the file after the item's slug, e.g.
+ * `water.png`, `ayran-raibi-pistache.jpg`. Anything without a photo falls back
+ * to a generated, category-tinted placeholder.
  */
-export const IMAGE_BY_SLUG: Record<string, string> = {};
+const productImages = import.meta.glob("../assets/products/*.{png,jpg,jpeg,webp,avif}", {
+  eager: true,
+  import: "default",
+}) as Record<string, string>;
+
+export const IMAGE_BY_SLUG: Record<string, string> = Object.fromEntries(
+  Object.entries(productImages).map(([filePath, url]) => {
+    const slug = filePath
+      .split("/")
+      .pop()!
+      .replace(/\.(png|jpe?g|webp|avif)$/i, "");
+    return [slug, url];
+  }),
+);
 
 const CATEGORY_TINT: Record<string, [string, string, string]> = {
   // [from, to, emoji]

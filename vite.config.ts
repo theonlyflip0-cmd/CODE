@@ -16,6 +16,11 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // For the offline single-file demo (npm run demo) inline every asset as a
+    // data URI so product photos end up baked into the one HTML file.
+    assetsInlineLimit: process.env.VITE_HASH_ROUTER === "1" ? 1_000_000_000 : 4096,
+  },
   server: {
     port: 5173,
   },
