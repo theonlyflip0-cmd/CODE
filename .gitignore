@@ -1,6 +1,8 @@
 node_modules
 dist
+dist-demo
 dist-ssr
+kral-durum-demo.html
 *.local
 
 # Env (real secrets live here — never commit)

@@ -52,6 +52,23 @@ VITE_SUPABASE_ANON_KEY=...
 > `.env` rendert de site nog steeds, maar laat het menu/bestellen een
 > "Supabase niet geconfigureerd"-melding zien.
 
+### Offline demo (single HTML file)
+
+Zonder `.env` draait de app in **demomodus**: de storefront en het adminbord
+worden gevuld met voorbeelddata (menu + bestellingen) en zijn volledig
+klikbaar, zonder backend. Handig om snel te bekijken.
+
+Een los, zelfstandig HTML-bestand genereren dat je rechtstreeks vanaf schijf
+(`file://`) kunt openen:
+
+```bash
+npm run demo        # -> kral-durum-demo.html
+```
+
+Dat bouwt met hash-routing (`#/`, `#/admin`) en inlinet alle CSS/JS in één
+bestand. Open `kral-durum-demo.html` in een browser; klik **Admin** in de footer
+(of zet `#/admin` achter de URL) voor het dashboard.
+
 ### Database
 
 De Supabase-client staat in `src/integrations/supabase/`. Schema, RLS-policies,

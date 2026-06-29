@@ -16,6 +16,7 @@ import { cn, euro } from "@/lib/utils";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import type { OrderStatus, OrderItemJson } from "@/integrations/supabase/types";
 import { CATEGORY_ORDER, CATEGORY_LABELS, type Category } from "@/data/menu";
+import { DEMO_ORDERS, DEMO_MENU_ROWS } from "@/data/demo";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -89,16 +90,8 @@ function AdminPage() {
     );
   }
 
-  if (!isSupabaseConfigured) {
-    return (
-      <CenteredCard>
-        <p className="text-sm text-muted-foreground">
-          Supabase is nog niet geconfigureerd. Vul <code>.env</code> in met je
-          <code> VITE_SUPABASE_URL</code> en <code>VITE_SUPABASE_ANON_KEY</code>.
-        </p>
-      </CenteredCard>
-    );
-  }
+  // No backend configured → run a fully in-memory demo board.
+  if (!isSupabaseConfigured) return <Dashboard session={null} demo />;
 
   if (!session) return <Login />;
   return <Dashboard session={session} />;
@@ -197,7 +190,7 @@ function Login() {
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
-function Dashboard({ session }: { session: Session }) {
+function Dashboard({ session, demo = false }: { session: Session | null; demo?: boolean }) {
   const [tab, setTab] = useState<Tab>("orders");
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [menu, setMenu] = useState<MenuRow[]>([]);
@@ -205,6 +198,23 @@ function Dashboard({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true);
 
   async function loadAll() {
+    if (demo) {
+      setOrders(DEMO_ORDERS.map((o) => ({ ...o })) as unknown as OrderRow[]);
+      setMenu(
+        DEMO_MENU_ROWS.map((r) => ({
+          id: r.id,
+          slug: r.slug,
+          name_nl: r.name_nl,
+          price: r.price,
+          category: r.category,
+          sort_order: r.sort_order,
+          available: r.available,
+        })),
+      );
+      setOrderingClosed(false);
+      setLoading(false);
+      return;
+    }
     const [ordersRes, menuRes, settingsRes] = await Promise.all([
       supabase.from("orders").select("*").order("created_at", { ascending: false }),
       supabase.from("menu_items").select("id,slug,name_nl,price,category,sort_order,available").order("category").order("sort_order"),
@@ -218,6 +228,7 @@ function Dashboard({ session }: { session: Session }) {
 
   useEffect(() => {
     void loadAll();
+    if (demo) return;
     const channel = supabase
       .channel("admin")
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => void loadAll())
@@ -227,29 +238,33 @@ function Dashboard({ session }: { session: Session }) {
     return () => {
       void supabase.removeChannel(channel);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Order actions ──
+  // ── Order actions (optimistic local update + persist when live) ──
   async function acceptOrder(id: string, minutes: number) {
-    await supabase.from("orders").update({ status: "accepted", ready_minutes: minutes }).eq("id", id);
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "accepted", ready_minutes: minutes } : o)));
+    if (!demo) await supabase.from("orders").update({ status: "accepted", ready_minutes: minutes }).eq("id", id);
   }
   async function rejectOrder(id: string) {
-    await supabase.from("orders").delete().eq("id", id);
+    setOrders((prev) => prev.filter((o) => o.id !== id));
+    if (!demo) await supabase.from("orders").delete().eq("id", id);
   }
   async function setStatus(id: string, status: OrderStatus) {
-    await supabase.from("orders").update({ status }).eq("id", id);
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+    if (!demo) await supabase.from("orders").update({ status }).eq("id", id);
   }
 
   // ── Menu actions ──
   async function toggleAvailable(id: string, available: boolean) {
     setMenu((prev) => prev.map((m) => (m.id === id ? { ...m, available } : m)));
-    await supabase.from("menu_items").update({ available }).eq("id", id);
+    if (!demo) await supabase.from("menu_items").update({ available }).eq("id", id);
   }
 
   // ── Settings ──
   async function toggleClosed(closed: boolean) {
     setOrderingClosed(closed);
-    await supabase.from("settings").update({ ordering_closed: closed }).eq("id", 1);
+    if (!demo) await supabase.from("settings").update({ ordering_closed: closed }).eq("id", 1);
   }
 
   // ── Today's stats ──
@@ -285,7 +300,14 @@ function Dashboard({ session }: { session: Session }) {
               <span className={cn("size-2 rounded-full", orderingClosed ? "bg-red-400" : "bg-emerald-400")} />
               {orderingClosed ? "Gesloten" : "✓ Open"}
             </span>
-            <span className="hidden text-sm text-white/70 sm:inline">{session.user.email}</span>
+            {demo && (
+              <span className="rounded-full bg-royal-red/20 px-2 py-0.5 text-[10px] font-bold tracking-wide text-royal-red">
+                DEMO
+              </span>
+            )}
+            <span className="hidden text-sm text-white/70 sm:inline">
+              {session?.user.email ?? "demo@kraldurum.nl"}
+            </span>
             <button
               onClick={() => void supabase.auth.signOut()}
               className="rounded-full p-2 hover:bg-white/10"

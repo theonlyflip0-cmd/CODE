@@ -8,7 +8,8 @@
     "build": "npm run routes && tsc --noEmit && vite build",
     "preview": "vite preview",
     "routes": "tsr generate",
-    "typecheck": "npm run routes && tsc --noEmit"
+    "typecheck": "npm run routes && tsc --noEmit",
+    "demo": "npm run routes && node scripts/inline-demo.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.0",

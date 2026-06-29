@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   Star,
   Heart,
@@ -16,8 +16,9 @@ import {
   Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn, euro, hhmm } from "@/lib/utils";
+import { cn, euro, hhmm, uid } from "@/lib/utils";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
+import { DEMO_MENU_ROWS } from "@/data/demo";
 import {
   CATEGORY_ORDER,
   CATEGORY_LABELS,
@@ -310,6 +311,44 @@ const lineHasNoOptions = (l: CartLine) =>
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+type MenuRowLike = {
+  id: string;
+  slug: string;
+  name_nl: string;
+  name_en: string;
+  description_nl: string | null;
+  description_en: string | null;
+  price: number | string;
+  category: string;
+  sort_order: number;
+  is_popular: boolean;
+  available: boolean;
+};
+
+function sortRows(rows: MenuRowLike[]): MenuRowLike[] {
+  return [...rows].sort((a, b) => {
+    const ca = CATEGORY_ORDER.indexOf(a.category as Category);
+    const cb = CATEGORY_ORDER.indexOf(b.category as Category);
+    if (ca !== cb) return ca - cb;
+    return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+  });
+}
+
+function mapRows(rows: MenuRowLike[]): MenuItem[] {
+  return rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    name: { nl: r.name_nl, en: r.name_en },
+    desc: { nl: r.description_nl ?? "", en: r.description_en ?? "" },
+    price: Number(r.price),
+    image: imageForItem(r.slug, r.category, r.name_nl),
+    spicy: SPICY_SLUGS.has(r.slug),
+    popular: r.is_popular,
+    available: r.available,
+    category: r.category,
+  }));
+}
+
 function CustomerSite() {
   const [lang, setLang] = useState<Lang>("nl");
   const t: Translation = T[lang];
@@ -352,7 +391,9 @@ function CustomerSite() {
   // ── Loading + realtime ─────────────────────────────────────────────────────
   async function load() {
     if (!isSupabaseConfigured) {
-      setItems([]);
+      // Offline demo mode — browse the full menu without a backend.
+      setItems(mapRows(sortRows(DEMO_MENU_ROWS)));
+      setOrderingClosed(false);
       setLoading(false);
       return;
     }
@@ -361,28 +402,8 @@ function CustomerSite() {
       supabase.from("settings").select("ordering_closed").eq("id", 1).maybeSingle(),
     ]);
 
-    const rows = menuRes.data ?? [];
-    rows.sort((a, b) => {
-      const ca = CATEGORY_ORDER.indexOf(a.category as Category);
-      const cb = CATEGORY_ORDER.indexOf(b.category as Category);
-      if (ca !== cb) return ca - cb;
-      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
-    });
-
-    const mapped: MenuItem[] = rows.map((r) => ({
-      id: r.id,
-      slug: r.slug,
-      name: { nl: r.name_nl, en: r.name_en },
-      desc: { nl: r.description_nl ?? "", en: r.description_en ?? "" },
-      price: Number(r.price),
-      image: imageForItem(r.slug, r.category, r.name_nl),
-      spicy: SPICY_SLUGS.has(r.slug),
-      popular: r.is_popular,
-      available: r.available,
-      category: r.category,
-    }));
-
-    setItems(mapped);
+    const rows = sortRows((menuRes.data ?? []) as unknown as MenuRowLike[]);
+    setItems(mapRows(rows));
     setOrderingClosed(Boolean(settingsRes.data?.ordering_closed));
     setLoading(false);
   }
@@ -456,7 +477,7 @@ function CustomerSite() {
       return [
         ...prev,
         {
-          lineId: crypto.randomUUID(),
+          lineId: uid(),
           itemId: item.id,
           qty: 1,
           options: emptyOptions(),
@@ -469,7 +490,7 @@ function CustomerSite() {
   function addCustomLine(item: MenuItem, options: ItemOptions, optionsPrice: number) {
     setCart((prev) => [
       ...prev,
-      { lineId: crypto.randomUUID(), itemId: item.id, qty: 1, options, optionsPrice },
+      { lineId: uid(), itemId: item.id, qty: 1, options, optionsPrice },
     ]);
   }
 
@@ -508,10 +529,6 @@ function CustomerSite() {
       setFormError(t.requireAddress);
       return;
     }
-    if (!isSupabaseConfigured) {
-      setFormError(t.noBackend);
-      return;
-    }
     if (payment === "ideal") {
       setIdealOpen(true);
     } else {
@@ -533,6 +550,25 @@ function CustomerSite() {
 
   async function saveOrder() {
     const minutes = mode === "delivery" ? 30 : 12;
+    const ready =
+      when === "schedule" && scheduleTime
+        ? scheduleTime
+        : hhmm(new Date(Date.now() + minutes * 60_000));
+
+    if (!isSupabaseConfigured) {
+      // Offline demo: fabricate an order number + confirmation.
+      setProcessing(false);
+      setConfirmation({
+        orderNumber: 1000 + Math.floor(Math.random() * 900),
+        readyTime: ready,
+        minutes,
+      });
+      setCart([]);
+      setLeaveAtDoor(false);
+      setInstructions("");
+      return;
+    }
+
     const itemsJson = cart.map((l) => {
       const it = itemById.get(l.itemId)!;
       return {
@@ -572,11 +608,6 @@ function CustomerSite() {
       setFormError(error?.message ?? "Er ging iets mis bij het plaatsen van je bestelling.");
       return;
     }
-
-    const ready =
-      when === "schedule" && scheduleTime
-        ? scheduleTime
-        : hhmm(new Date(Date.now() + minutes * 60_000));
 
     setConfirmation({ orderNumber: data.order_number, readyTime: ready, minutes });
     // Reset cart + form
@@ -973,8 +1004,12 @@ function CustomerSite() {
               </a>
             </div>
           </div>
-          <div className="border-t border-white/10 py-4 text-center text-xs text-white/50">
-            © 2025 Kral Durum Den Haag
+          <div className="flex items-center justify-center gap-3 border-t border-white/10 py-4 text-center text-xs text-white/50">
+            <span>© 2025 Kral Durum Den Haag</span>
+            <span aria-hidden>·</span>
+            <Link to="/admin" className="font-semibold text-white/70 hover:text-royal-gold">
+              Admin
+            </Link>
           </div>
         </footer>
       </main>
