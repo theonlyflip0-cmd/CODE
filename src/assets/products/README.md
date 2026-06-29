@@ -1,19 +1,39 @@
 # Product photos
 
-Drop a product photo here and name the file after the item's **slug**. It is
-picked up automatically (`IMAGE_BY_SLUG` in `src/data/menu.ts`) and replaces the
-generated placeholder on the storefront, modal and cart — no code changes.
+Drop product photos here. Each file is picked up automatically and shown on the
+storefront, modal and cart (no code changes). A file attaches to a product when
+its **basename** equals the product's slug, **or** the slug→file alias in
+`PHOTO_FILE_BY_SLUG` (`src/data/menu.ts`) points at it.
 
 Accepted extensions: `.png`, `.jpg`, `.jpeg`, `.webp`, `.avif`.
 
-## Drinks added from product photos
+## Expected files (your menu)
 
-| Photo                         | Filename to save                 | Product (slug)            |
-| ----------------------------- | -------------------------------- | ------------------------- |
-| Munzur water 0,5 L            | `water.png`                      | Munzur Water (`water`)    |
-| Silifke Raïbi Pistache        | `ayran-raibi-pistache.png`       | `ayran-raibi-pistache`    |
-| Silifke Raïbi Granaatappel    | `raibi-granaatappel.png`         | `raibi-granaatappel`      |
-| Silifke Ayran Kers (cherry)   | `ayran-kers.png`                 | `ayran-kers`              |
-| Silifke Yayık Ayran           | `ayran.png`                      | Yayık Ayran (`ayran`)     |
+These match the supplied filenames — keep them exactly as listed:
+
+**Wraps**
+
+- `wrap_kipfilet_feed.png` · `wrap_kippenvleugels_feed.png`
+- `wrap_adana_feed.png` · `wrap_lamsflees_feed.png`
+
+**Menu's**
+
+- `menu_kipfilet_feed.png` · `menu_kippenvleugels_feed.png`
+- `menu_adana_feed.png` · `menu_lamsvlees_feed.png` · `kralbox_feed.png`
+
+**Schotels**
+
+- `schotel_1_kipfilet_feed.png` · `schotel_2_feed.png` · `schotel_mix_feed.png`
+
+**Losse producten**
+
+- `patat.png` · `rijst.png` · `linzensoep.png` · `zuur.png` · `cacik.png`
+
+**Dranken**
+
+- `cocacola.png` · `cocacola-zero.png` · `pepsi.png`
+- `fanta-orange.png` · `fanta-straw-kiwi.png` · `fanta-lemon-zero.png` · `fanta-exotic.png`
+- `sprite-zero.png` · `energy.png` · `capri-sun.png` · `kizilay.png`
+- `water.png` · `ayran.png` · `ayran-kers.png` · `ayran-raibi-pistache.png` · `raibi-granaatappel.png`
 
 After adding the files: `npm run dev` (live) or `npm run demo` (single-file).

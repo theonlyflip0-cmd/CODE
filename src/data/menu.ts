@@ -143,8 +143,8 @@ export function spiesCountFor(slug: string): number {
       return 1;
     case "schotel-2":
       return 2;
-    case "schotel-3":
-      return 3;
+    case "schotel-mix":
+      return 2;
     case "kral-box":
       return 1;
     default:
@@ -157,7 +157,7 @@ export function allowsExtraSpies(slug: string): boolean {
   return (
     slug === "schotel-1" ||
     slug === "schotel-2" ||
-    slug === "schotel-3" ||
+    slug === "schotel-mix" ||
     slug === "kral-box"
   );
 }
@@ -203,20 +203,37 @@ export function modalConfigFor(category: string): ModalConfig | null {
 
 /** Slugs flagged with a spice badge regardless of the DB `spicy` value. */
 export const SPICY_SLUGS = new Set<string>([
-  "kip-durum",
-  "lams-durum",
-  "mix-durum",
+  "wrap-adana",
+  "menu-adana",
   "kral-box",
-  "schotel-3",
-  "adana-durum",
-  "kapsalon",
 ]);
 
 /**
- * Map of slug -> real photo URL, built automatically from any image dropped in
- * `src/assets/products/`. Name the file after the item's slug, e.g.
- * `water.png`, `ayran-raibi-pistache.jpg`. Anything without a photo falls back
- * to a generated, category-tinted placeholder.
+ * Photos live in `src/assets/products/`. Files are picked up automatically
+ * (keyed by their basename). When a photo's filename doesn't equal the product
+ * slug, map it here: slug -> file basename (without extension).
+ */
+const PHOTO_FILE_BY_SLUG: Record<string, string> = {
+  "wrap-kipfilet": "wrap_kipfilet_feed",
+  "wrap-kippenvleugels": "wrap_kippenvleugels_feed",
+  "wrap-adana": "wrap_adana_feed",
+  "wrap-lamsvlees": "wrap_lamsflees_feed",
+  "menu-kipfilet": "menu_kipfilet_feed",
+  "menu-kippenvleugels": "menu_kippenvleugels_feed",
+  "menu-adana": "menu_adana_feed",
+  "menu-lamsvlees": "menu_lamsvlees_feed",
+  "kral-box": "kralbox_feed",
+  "schotel-1": "schotel_1_kipfilet_feed",
+  "schotel-2": "schotel_2_feed",
+  "schotel-mix": "schotel_mix_feed",
+  cola: "cocacola",
+  "cola-zero": "cocacola-zero",
+};
+
+/**
+ * Map of file basename -> real photo URL, built automatically from any image
+ * dropped in `src/assets/products/`. Anything without a photo falls back to a
+ * generated, category-tinted placeholder.
  */
 const productImages = import.meta.glob("../assets/products/*.{png,jpg,jpeg,webp,avif}", {
   eager: true,
@@ -225,11 +242,11 @@ const productImages = import.meta.glob("../assets/products/*.{png,jpg,jpeg,webp,
 
 export const IMAGE_BY_SLUG: Record<string, string> = Object.fromEntries(
   Object.entries(productImages).map(([filePath, url]) => {
-    const slug = filePath
+    const base = filePath
       .split("/")
       .pop()!
       .replace(/\.(png|jpe?g|webp|avif)$/i, "");
-    return [slug, url];
+    return [base, url];
   }),
 );
 
@@ -262,7 +279,12 @@ export function placeholderImage(category: string, label: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-/** Resolve the display image for an item: explicit map, else placeholder. */
+/** Resolve the display image for an item: aliased file, file == slug, else placeholder. */
 export function imageForItem(slug: string, category: string, label: string): string {
-  return IMAGE_BY_SLUG[slug] ?? placeholderImage(category, label);
+  const aliased = PHOTO_FILE_BY_SLUG[slug];
+  return (
+    (aliased ? IMAGE_BY_SLUG[aliased] : undefined) ??
+    IMAGE_BY_SLUG[slug] ??
+    placeholderImage(category, label)
+  );
 }
