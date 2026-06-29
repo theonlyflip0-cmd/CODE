@@ -1,0 +1,175 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Kral Durum To Go — design tokens.
+ * NOTE the deliberate gold<->red swap: the variable named --royal-gold actually
+ * renders RED (the primary action/accent colour), and --royal-red renders the
+ * amber/gold secondary highlight. Kept as-is to match the original design.
+ */
+:root {
+  --radius: 0.625rem;
+
+  --background: oklch(0.995 0.003 80); /* warm off-white */
+  --foreground: oklch(0.16 0.01 60);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0.01 60);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.01 60);
+
+  --royal-gold: oklch(0.55 0.21 27); /* -> deep red (primary accent) */
+  --royal-gold-soft: oklch(0.95 0.05 25); /* soft red bg */
+  --royal-red: oklch(0.78 0.16 70); /* -> amber / gold */
+  --royal-red-soft: oklch(0.95 0.05 80);
+
+  --charcoal: oklch(0.18 0.01 60);
+  --charcoal-soft: oklch(0.27 0.01 60);
+
+  --ideal: oklch(0.62 0.22 350); /* iDEAL magenta/pink */
+
+  --primary: oklch(0.55 0.21 27); /* red */
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0.01 70);
+  --secondary-foreground: oklch(0.2 0.01 60);
+  --muted: oklch(0.96 0.005 70);
+  --muted-foreground: oklch(0.52 0.01 60);
+  --accent: oklch(0.95 0.05 25);
+  --accent-foreground: oklch(0.4 0.18 27);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  --border: oklch(0.9 0.005 70);
+  --input: oklch(0.9 0.005 70);
+  --ring: oklch(0.55 0.21 27); /* red */
+
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.16 0.01 60);
+  --sidebar-primary: oklch(0.55 0.21 27);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0.01 70);
+  --sidebar-accent-foreground: oklch(0.2 0.01 60);
+  --sidebar-border: oklch(0.9 0.005 70);
+  --sidebar-ring: oklch(0.55 0.21 27);
+}
+
+.dark {
+  --background: oklch(0.16 0.01 60);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.2 0.01 60);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.2 0.01 60);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.62 0.22 27);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.27 0.01 60);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.27 0.01 60);
+  --muted-foreground: oklch(0.7 0.01 60);
+  --accent: oklch(0.3 0.05 25);
+  --accent-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.62 0.22 27);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-royal-gold: var(--royal-gold);
+  --color-royal-gold-soft: var(--royal-gold-soft);
+  --color-royal-red: var(--royal-red);
+  --color-royal-red-soft: var(--royal-red-soft);
+  --color-charcoal: var(--charcoal);
+  --color-charcoal-soft: var(--charcoal-soft);
+  --color-ideal: var(--ideal);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+    outline-color: color-mix(in oklch, var(--ring) 50%, transparent);
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+  body {
+    margin: 0;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+/* Hide number-input spinners (tip / amount fields) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+@keyframes kd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.kd-spin {
+  animation: kd-spin 1s linear infinite;
+}
