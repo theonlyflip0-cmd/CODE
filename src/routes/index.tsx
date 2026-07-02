@@ -16,6 +16,9 @@ import {
   Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CinematicIntro } from "@/components/CinematicIntro";
+import { EmberField } from "@/components/EmberField";
+import { Reveal } from "@/components/Reveal";
 import { cn, euro, hhmm, uid } from "@/lib/utils";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { DEMO_MENU_ROWS } from "@/data/demo";
@@ -706,6 +709,9 @@ function CustomerSite() {
           </div>
         )}
 
+        {/* ── Cinematic scroll-scrub intro ── */}
+        <CinematicIntro />
+
         {/* ── Hero ── */}
         <section className="relative overflow-hidden bg-charcoal text-white">
           <div
@@ -774,57 +780,75 @@ function CustomerSite() {
           </div>
         </section>
 
-        {/* ── Menu + cart ── */}
-        <section className="mx-auto max-w-7xl px-4 py-10">
-          {/* Category tabs */}
-          <div className="sticky top-[57px] z-30 -mx-4 mb-6 overflow-x-auto border-b border-border bg-background/95 px-4 py-2 backdrop-blur">
-            <div className="flex gap-2">
-              {grouped.map(({ category }) => (
-                <button
-                  key={category}
-                  onClick={() => scrollToCategory(category)}
-                  className="whitespace-nowrap rounded-full border border-border px-3.5 py-1.5 text-sm font-semibold hover:border-royal-gold hover:text-royal-gold"
-                >
-                  {CATEGORY_LABELS[category][lang]}
-                </button>
-              ))}
+        {/* ── Menu + cart (fire-shard background) ── */}
+        <section className="relative overflow-hidden bg-[#0d0a08]">
+          <EmberField />
+          {/* Readability veil so cards + text always contrast the embers */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 40%, rgba(0,0,0,0.6) 100%)",
+            }}
+            aria-hidden
+          />
+          <div className="relative mx-auto max-w-7xl px-4 py-12">
+            {/* Category tabs */}
+            <div className="sticky top-[57px] z-30 -mx-4 mb-6 overflow-x-auto border-b border-white/10 bg-black/60 px-4 py-2 backdrop-blur">
+              <div className="flex gap-2">
+                {grouped.map(({ category }) => (
+                  <button
+                    key={category}
+                    onClick={() => scrollToCategory(category)}
+                    className="whitespace-nowrap rounded-full border border-white/20 bg-white/5 px-3.5 py-1.5 text-sm font-semibold text-white/90 hover:border-royal-gold hover:text-royal-gold"
+                  >
+                    {CATEGORY_LABELS[category][lang]}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <div className="grid gap-8 lg:grid-cols-3">
-            {/* Menu list */}
-            <div className="lg:col-span-2">
-              {loading ? (
-                <div className="flex items-center justify-center py-20 text-muted-foreground">
-                  <Loader2 className="mr-2 size-5 kd-spin" /> Menu laden…
-                </div>
-              ) : grouped.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground">
-                  {isSupabaseConfigured
-                    ? "Nog geen menu-items gevonden. Voeg ze toe in Supabase."
-                    : t.noBackend}
-                </div>
-              ) : (
-                grouped.map(({ category, items: catItems }) => (
-                  <div key={category} id={`cat-${category}`} className="mb-10 scroll-mt-28">
-                    <h2 className="mb-4 text-xl font-extrabold uppercase tracking-tight">
-                      {CATEGORY_LABELS[category][lang]}
-                    </h2>
-                    <div className="space-y-3">
-                      {catItems.map((item) => (
-                        <MenuCard
-                          key={item.id}
-                          item={item}
-                          lang={lang}
-                          t={t}
-                          onAdd={() => onAddClick(item)}
-                        />
-                      ))}
-                    </div>
+            <div className="grid gap-8 lg:grid-cols-3">
+              {/* Menu list */}
+              <div className="lg:col-span-2">
+                {loading ? (
+                  <div className="flex items-center justify-center py-20 text-white/70">
+                    <Loader2 className="mr-2 size-5 kd-spin" /> Menu laden…
                   </div>
-                ))
-              )}
-            </div>
+                ) : grouped.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-white/20 p-10 text-center text-white/70">
+                    {isSupabaseConfigured
+                      ? "Nog geen menu-items gevonden. Voeg ze toe in Supabase."
+                      : t.noBackend}
+                  </div>
+                ) : (
+                  grouped.map(({ category, items: catItems }, catIdx) => (
+                    <Reveal
+                      key={category}
+                      index={catIdx}
+                      className="mb-10 scroll-mt-28 block"
+                    >
+                      <div id={`cat-${category}`}>
+                        <h2 className="mb-4 font-serif text-2xl uppercase tracking-wide text-white">
+                          {CATEGORY_LABELS[category][lang]}
+                        </h2>
+                        <div className="space-y-3">
+                          {catItems.map((item, i) => (
+                            <Reveal key={item.id} index={i} className="block">
+                              <MenuCard
+                                item={item}
+                                lang={lang}
+                                t={t}
+                                onAdd={() => onAddClick(item)}
+                              />
+                            </Reveal>
+                          ))}
+                        </div>
+                      </div>
+                    </Reveal>
+                  ))
+                )}
+              </div>
 
             {/* Cart sidebar */}
             <aside className="lg:col-span-1">
@@ -870,6 +894,7 @@ function CustomerSite() {
                 />
               </div>
             </aside>
+            </div>
           </div>
         </section>
 
