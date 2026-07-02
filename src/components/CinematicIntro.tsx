@@ -16,8 +16,11 @@ import { cn } from "@/lib/utils";
  * fallback keeps the section looking intentional.
  */
 
-const VIDEO_SRC = "/tandir-360.mp4";
-const POSTER_SRC = "/tandir-poster.jpg";
+// `BASE_URL` resolves to "/" in a normal build and "./" in the offline
+// hash-routed demo, so the src works both when served from a web root and
+// when opened straight from disk.
+const VIDEO_SRC = `${import.meta.env.BASE_URL}tandir-360.mp4`;
+const POSTER_SRC = `${import.meta.env.BASE_URL}tandir-poster.jpg`;
 
 export function CinematicIntro() {
   const sectionRef = useRef<HTMLElement>(null);

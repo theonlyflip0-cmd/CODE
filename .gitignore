@@ -3,6 +3,9 @@ dist
 dist-demo
 dist-ssr
 kral-durum-demo.html
+# Root-level copy of the tandır video, staged next to the demo HTML by
+# scripts/inline-demo.mjs. The source lives at public/tandir-360.mp4.
+/tandir-360.mp4
 *.local
 
 # Env (real secrets live here — never commit)

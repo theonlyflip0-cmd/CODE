@@ -4,7 +4,7 @@
 //
 //   npm run demo
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const OUT_DIR = "dist-demo";
@@ -46,4 +46,17 @@ const html = `<!doctype html>
 
 writeFileSync("kral-durum-demo.html", html);
 console.log(`• wrote kral-durum-demo.html (${(html.length / 1024).toFixed(0)} kB)`);
-console.log("  Open it in any browser — runs fully offline with demo data.");
+
+// The tandır video is too large to base64-inline sanely (would ~= 6 MB in
+// the HTML and break progressive playback). Copy it alongside the HTML so
+// the demo has a real static file to seek against.
+const VIDEO = "tandir-360.mp4";
+if (existsSync(`public/${VIDEO}`)) {
+  copyFileSync(`public/${VIDEO}`, VIDEO);
+  console.log(`• copied ${VIDEO} next to the demo (needed for the intro scrub)`);
+} else {
+  console.log(
+    `• NOTE: public/${VIDEO} not found — the intro will fall back to the ember disc.`,
+  );
+}
+console.log("  Open kral-durum-demo.html in any browser — runs fully offline.");
