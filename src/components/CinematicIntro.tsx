@@ -97,30 +97,39 @@ export function CinematicIntro() {
     };
   }, [reducedMotion]);
 
-  const { overlayOpacity, videoScale, blackOpacity } = useMemo(() => {
-    // 0-60%: overlay visible. 60-80%: fade overlay. 85-100%: scale + fade to black.
-    const overlay = progress < 0.6 ? 1 : Math.max(0, 1 - (progress - 0.6) / 0.2);
+  const { videoScale, blackOpacity, storyOpacity, chevronOpacity } = useMemo(() => {
+    // 0–85%: story panels visible. 85–100%: video scales + fades to black.
     const scaleT = Math.max(0, Math.min(1, (progress - 0.85) / 0.15));
-    const scale = 1 + scaleT * 0.15;
-    const black = scaleT;
-    return { overlayOpacity: overlay, videoScale: scale, blackOpacity: black };
+    // Story panels' overall opacity multiplier — fades all panels out together
+    // at the end so the black-out never fights an in-flight panel transition.
+    const story = 1 - scaleT;
+    // Chevron only during the first panel; fade before the second appears.
+    const chev = Math.max(0, 1 - progress / 0.12);
+    return {
+      videoScale: 1 + scaleT * 0.15,
+      blackOpacity: scaleT,
+      storyOpacity: story,
+      chevronOpacity: chev,
+    };
   }, [progress]);
 
-  // ── Reduced motion: static poster with a soft fade in ────────────────────
+  // ── Reduced motion: same story, no scrubbing — a static stacked list ────
   if (reducedMotion) {
     return (
       <section className="relative overflow-hidden bg-black text-white">
-        <div className="relative flex min-h-[70vh] flex-col items-center justify-center px-6 py-24 text-center">
-          <FireGlow />
-          <p className="relative z-10 mb-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-royal-red">
-            Kral Durum · To Go
-          </p>
-          <h1 className="relative z-10 max-w-3xl font-serif text-4xl leading-tight sm:text-6xl">
-            <span className="italic">Traditie</span> uit de{" "}
-            <span className="italic text-royal-gold">tandır</span>,
-            <br />
-            vers van het <span className="italic text-royal-gold">vuur</span>.
-          </h1>
+        <FireGlow />
+        <div className="relative mx-auto flex max-w-4xl flex-col items-center gap-14 px-6 py-24 text-center sm:gap-20 sm:py-28">
+          {STORY_PANELS.map((panel, i) => (
+            <div key={i} className="flex flex-col items-center">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-royal-red">
+                {panel.eyebrow}
+              </p>
+              <h2 className="max-w-3xl font-serif text-3xl leading-tight sm:text-5xl">
+                {panel.headline}
+              </h2>
+              <p className="mt-4 max-w-md text-sm text-white/80 sm:text-base">{panel.sub}</p>
+            </div>
+          ))}
         </div>
       </section>
     );
@@ -159,28 +168,27 @@ export function CinematicIntro() {
           {!videoReady && <TandirFallback scale={videoScale} />}
         </div>
 
-        {/* Overlay: title + tagline + scroll hint */}
+        {/* Scroll-driven 3D story panels */}
         <div
-          className="pointer-events-none absolute inset-0 z-10 text-white"
-          style={{ opacity: overlayOpacity }}
+          className="pointer-events-none absolute inset-0 z-10"
+          style={{
+            perspective: "1200px",
+            perspectiveOrigin: "50% 45%",
+            opacity: storyOpacity,
+          }}
         >
-          <div className="absolute inset-x-0 top-24 flex flex-col items-center text-center">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-royal-red">
-              Kral Durum · To Go
-            </p>
-          </div>
-          <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-            <h1 className="max-w-4xl font-serif text-4xl leading-tight drop-shadow-[0_2px_20px_rgba(0,0,0,0.7)] sm:text-6xl md:text-7xl">
-              <span className="italic">Traditie</span> uit de{" "}
-              <span className="italic text-royal-gold">tandır</span>,
-              <br />
-              vers van het <span className="italic text-royal-gold">vuur</span>.
-            </h1>
-          </div>
-          <div className="absolute inset-x-0 bottom-14 flex flex-col items-center gap-2 text-white/80">
-            <span className="text-[10px] uppercase tracking-[0.4em]">Scroll</span>
-            <ChevronDown className="size-6 kd-chevron-bounce" />
-          </div>
+          {STORY_PANELS.map((panel, i) => (
+            <StoryPanel key={i} panel={panel} progress={progress} />
+          ))}
+        </div>
+
+        {/* Scroll chevron — only visible during the first panel */}
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-12 z-20 flex flex-col items-center gap-2 text-white/80"
+          style={{ opacity: chevronOpacity * storyOpacity }}
+        >
+          <span className="text-[10px] uppercase tracking-[0.4em]">Scroll</span>
+          <ChevronDown className="size-6 kd-chevron-bounce" />
         </div>
 
         {/* Fade to black at the very end (85–100%) */}
@@ -191,6 +199,133 @@ export function CinematicIntro() {
         />
       </div>
     </section>
+  );
+}
+
+// ── Story panels: scroll-driven 3D restaurant info ─────────────────────────
+
+type StoryPanelSpec = {
+  /** Scroll-progress center (0..1) where this panel is fully forward. */
+  center: number;
+  /** Half-width of visibility window in scroll progress. */
+  half: number;
+  eyebrow: string;
+  /** Rendered as JSX so we can italicise / colour key words. */
+  headline: React.ReactNode;
+  sub: string;
+};
+
+const STORY_PANELS: StoryPanelSpec[] = [
+  {
+    // Peak at page load so the tagline lands full-strength on first paint.
+    center: 0.0,
+    half: 0.13,
+    eyebrow: "Kral Durum · To Go",
+    headline: (
+      <>
+        <span className="italic">Traditie</span> uit de{" "}
+        <span className="italic text-royal-gold">tandır</span>,<br />
+        vers van het <span className="italic text-royal-gold">vuur</span>.
+      </>
+    ),
+    sub: "Houtskool gegrilde durum, verse lavash en huisgemaakte sauzen.",
+  },
+  {
+    center: 0.22,
+    half: 0.08,
+    eyebrow: "Het verhaal",
+    headline: (
+      <>
+        <span className="italic">Sinds 2018</span>
+        <br />
+        in Den Haag.
+      </>
+    ),
+    sub: "Elke spies op echte houtskool — geen kortere weg, alleen vlam.",
+  },
+  {
+    center: 0.40,
+    half: 0.08,
+    eyebrow: "Het ambacht",
+    headline: (
+      <>
+        Elke <span className="italic text-royal-gold">lavash</span>
+        <br />
+        met de <span className="italic">hand</span>.
+      </>
+    ),
+    sub: "Vers gebakken, elke ochtend. Zoals het thuis hoort.",
+  },
+  {
+    center: 0.58,
+    half: 0.08,
+    eyebrow: "In Den Haag",
+    headline: (
+      <>
+        <span className="italic">Tot je deur</span>,<br />
+        warm en op tijd.
+      </>
+    ),
+    sub: "€1,50 binnen 2 km · €2,50 binnen 5 km. Afhalen kan altijd.",
+  },
+  {
+    center: 0.75,
+    half: 0.08,
+    eyebrow: "★★★★★  ·  Google 5.0",
+    headline: (
+      <>
+        <span className="italic text-royal-gold">100K+</span>
+        <br />
+        blije klanten.
+      </>
+    ),
+    sub: "44 reviews. Elk bord komt met dezelfde vlam.",
+  },
+];
+
+function StoryPanel({ panel, progress }: { panel: StoryPanelSpec; progress: number }) {
+  // Signed distance from the panel's center, in units of half-width.
+  const signed = (progress - panel.center) / panel.half;
+  const abs = Math.min(1, Math.abs(signed));
+  const clamped = Math.max(-1, Math.min(1, signed));
+
+  // Opacity: full at center, 0 past ±half-width. Cheap smoothstep for polish.
+  const opacity = 1 - abs * abs * (3 - 2 * abs);
+  if (opacity <= 0.001) return null;
+
+  // 3D transform: depth-pull from -140px → 0 → -140px, rotateY ±22° across
+  // the pass so it enters from the right and exits to the left.
+  const tz = -140 * abs;
+  const ry = clamped * -22;
+
+  return (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-white will-change-transform"
+      style={{
+        opacity,
+        transform: `translateZ(${tz}px) rotateY(${ry}deg)`,
+        transformStyle: "preserve-3d",
+      }}
+    >
+      <p
+        className="mb-4 text-[11px] font-semibold uppercase tracking-[0.35em] text-royal-red"
+        style={{ textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}
+      >
+        {panel.eyebrow}
+      </p>
+      <h2
+        className="max-w-4xl font-serif text-4xl leading-tight sm:text-6xl md:text-7xl"
+        style={{ textShadow: "0 2px 24px rgba(0,0,0,0.75)" }}
+      >
+        {panel.headline}
+      </h2>
+      <p
+        className="mt-5 max-w-lg text-sm text-white/85 sm:text-base"
+        style={{ textShadow: "0 2px 14px rgba(0,0,0,0.7)" }}
+      >
+        {panel.sub}
+      </p>
+    </div>
   );
 }
 
