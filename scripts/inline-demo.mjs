@@ -4,7 +4,7 @@
 //
 //   npm run demo
 import { execSync } from "node:child_process";
-import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const OUT_DIR = "dist-demo";
@@ -26,6 +26,18 @@ const css = readFileSync(join(assetsDir, cssFile), "utf8");
 const js = readFileSync(join(assetsDir, jsFile), "utf8");
 const safeJs = js.replace(/<\/script>/gi, "<\\/script>");
 
+// Bake the tandır video straight into the HTML as a data URI so the demo is
+// truly ONE file — no separate mp4 to forget. Fully in-memory, so scrub
+// seeking is instant. (~4.9 MB mp4 → ~6.5 MB base64.)
+let videoTag = "";
+const VIDEO = "public/tandir-360.mp4";
+if (existsSync(VIDEO)) {
+  const b64 = readFileSync(VIDEO).toString("base64");
+  videoTag = `<script>window.__TANDIR_DATA__="data:video/mp4;base64,${b64}";</script>\n    `;
+} else {
+  console.log(`• NOTE: ${VIDEO} not found — the intro will use the ember-disc fallback.`);
+}
+
 const html = `<!doctype html>
 <html lang="nl">
   <head>
@@ -39,24 +51,11 @@ const html = `<!doctype html>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module">${safeJs}</script>
+    ${videoTag}<script type="module">${safeJs}</script>
   </body>
 </html>
 `;
 
 writeFileSync("kral-durum-demo.html", html);
-console.log(`• wrote kral-durum-demo.html (${(html.length / 1024).toFixed(0)} kB)`);
-
-// The tandır video is too large to base64-inline sanely (would ~= 6 MB in
-// the HTML and break progressive playback). Copy it alongside the HTML so
-// the demo has a real static file to seek against.
-const VIDEO = "tandir-360.mp4";
-if (existsSync(`public/${VIDEO}`)) {
-  copyFileSync(`public/${VIDEO}`, VIDEO);
-  console.log(`• copied ${VIDEO} next to the demo (needed for the intro scrub)`);
-} else {
-  console.log(
-    `• NOTE: public/${VIDEO} not found — the intro will fall back to the ember disc.`,
-  );
-}
-console.log("  Open kral-durum-demo.html in any browser — runs fully offline.");
+console.log(`• wrote kral-durum-demo.html (${(html.length / 1024 / 1024).toFixed(1)} MB, video baked in)`);
+console.log("  Open kral-durum-demo.html in any browser — ONE file, fully offline.");

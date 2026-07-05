@@ -712,74 +712,6 @@ function CustomerSite() {
         {/* ── Cinematic scroll-scrub intro ── */}
         <CinematicIntro />
 
-        {/* ── Hero ── */}
-        <section className="relative overflow-hidden bg-charcoal text-white">
-          <div
-            className="absolute inset-0 opacity-30"
-            style={{
-              backgroundImage:
-                "radial-gradient(900px 400px at 80% 20%, rgba(192,57,43,0.55), transparent), radial-gradient(700px 500px at 90% 90%, rgba(211,84,0,0.4), transparent)",
-            }}
-          />
-          <div className="relative mx-auto grid max-w-7xl gap-8 px-4 py-14 md:grid-cols-2 md:py-20">
-            <div className="flex flex-col justify-center">
-              <span className="mb-4 text-xs font-bold uppercase tracking-wider text-royal-gold">
-                {t.eyebrow}
-              </span>
-              <h1 className="text-4xl font-black leading-[0.95] sm:text-6xl">
-                {t.heroLine1}
-                <br />
-                {t.heroLine2}
-                <br />
-                <span className="italic text-royal-gold">{t.heroLine3}</span>
-              </h1>
-              <p className="mt-5 max-w-md text-white/75">{t.heroSub}</p>
-
-              {/* Mode toggle + postcode */}
-              <div className="mt-7 max-w-md rounded-2xl bg-charcoal-soft p-3 shadow-xl ring-1 ring-white/10">
-                <div className="mb-3 flex rounded-full bg-black/40 p-1">
-                  {(["delivery", "pickup"] as Mode[]).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setMode(m)}
-                      className={cn(
-                        "flex-1 rounded-full py-2 text-sm font-bold transition",
-                        mode === m ? "bg-black text-white" : "text-white/70",
-                      )}
-                    >
-                      {m === "delivery" ? t.delivery : t.pickup}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    value={postcode}
-                    onChange={(e) => setPostcode(e.target.value)}
-                    placeholder={t.postcodePh}
-                    className="min-w-0 flex-1 rounded-lg border-0 bg-white px-3 py-2.5 text-sm text-charcoal outline-none ring-2 ring-transparent focus:ring-royal-gold"
-                  />
-                  <Button onClick={checkPostcode}>{t.check}</Button>
-                </div>
-                {zoneMessage && (
-                  <p
-                    className={cn(
-                      "mt-2 text-sm font-medium",
-                      zoneMessage.kind === 0 ? "text-royal-red" : "text-white",
-                    )}
-                  >
-                    {zoneMessage.text}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="hidden items-center justify-center md:flex">
-              <div className="flex aspect-square w-full max-w-sm items-center justify-center rounded-3xl bg-gradient-to-br from-[#7a1d10] to-[#d35400] text-[10rem] shadow-2xl">
-                🌯
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* ── Menu + cart (fire-shard background) ── */}
         <section className="relative overflow-hidden bg-[#0d0a08]">
           <EmberField />
@@ -894,6 +826,74 @@ function CustomerSite() {
                 />
               </div>
             </aside>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Hero ── */}
+        <section className="relative overflow-hidden bg-charcoal text-white">
+          <div
+            className="absolute inset-0 opacity-30"
+            style={{
+              backgroundImage:
+                "radial-gradient(900px 400px at 80% 20%, rgba(192,57,43,0.55), transparent), radial-gradient(700px 500px at 90% 90%, rgba(211,84,0,0.4), transparent)",
+            }}
+          />
+          <div className="relative mx-auto grid max-w-7xl gap-8 px-4 py-14 md:grid-cols-2 md:py-20">
+            <div className="flex flex-col justify-center">
+              <span className="mb-4 text-xs font-bold uppercase tracking-wider text-royal-gold">
+                {t.eyebrow}
+              </span>
+              <h1 className="text-4xl font-black leading-[0.95] sm:text-6xl">
+                {t.heroLine1}
+                <br />
+                {t.heroLine2}
+                <br />
+                <span className="italic text-royal-gold">{t.heroLine3}</span>
+              </h1>
+              <p className="mt-5 max-w-md text-white/75">{t.heroSub}</p>
+
+              {/* Mode toggle + postcode */}
+              <div className="mt-7 max-w-md rounded-2xl bg-charcoal-soft p-3 shadow-xl ring-1 ring-white/10">
+                <div className="mb-3 flex rounded-full bg-black/40 p-1">
+                  {(["delivery", "pickup"] as Mode[]).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setMode(m)}
+                      className={cn(
+                        "flex-1 rounded-full py-2 text-sm font-bold transition",
+                        mode === m ? "bg-black text-white" : "text-white/70",
+                      )}
+                    >
+                      {m === "delivery" ? t.delivery : t.pickup}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={postcode}
+                    onChange={(e) => setPostcode(e.target.value)}
+                    placeholder={t.postcodePh}
+                    className="min-w-0 flex-1 rounded-lg border-0 bg-white px-3 py-2.5 text-sm text-charcoal outline-none ring-2 ring-transparent focus:ring-royal-gold"
+                  />
+                  <Button onClick={checkPostcode}>{t.check}</Button>
+                </div>
+                {zoneMessage && (
+                  <p
+                    className={cn(
+                      "mt-2 text-sm font-medium",
+                      zoneMessage.kind === 0 ? "text-royal-red" : "text-white",
+                    )}
+                  >
+                    {zoneMessage.text}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="hidden items-center justify-center md:flex">
+              <div className="flex aspect-square w-full max-w-sm items-center justify-center rounded-3xl bg-gradient-to-br from-[#7a1d10] to-[#d35400] text-[10rem] shadow-2xl">
+                🌯
+              </div>
             </div>
           </div>
         </section>

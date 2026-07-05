@@ -3,24 +3,48 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Full-viewport pinned scroll-scrub hero. Maps scroll progress to the
- * currentTime of a 360° tandır video with rAF + lerp smoothing.
+ * Full-viewport pinned scroll hero, in three acts:
  *
- * • Section is 300vh tall (200vh on mobile) with a sticky child.
- * • 0–60% progress: logo + tagline + chevron are visible.
- * • 60–85%: overlay fades out.
- * • 85–100%: video scales 1 → 1.15 while the frame fades to black.
- * • prefers-reduced-motion: a static poster hero with a simple fade.
+ * 1. SPIN (0–55%): scroll scrubs the 360° tandır video via currentTime with
+ *    rAF + lerp smoothing while restaurant story panels pass by in 3D.
+ * 2. DIVE (55–92%): the whole page flies INTO the oven mouth — the video
+ *    scales 1→9 around the mouth's position (60% 51% in the final frame),
+ *    which fills the screen with fire; a fire-flash overlay ramps in.
+ * 3. LANDING (86–100%): the flash settles into the menu section's dark
+ *    charcoal (#0d0a08) so the unpin hands off seamlessly — the menu
+ *    "appears out of the fire".
  *
- * Expects `/tandir-360.mp4` in `public/`. If missing, an ember-glow
- * fallback keeps the section looking intentional.
+ * Section is 300vh tall (200vh on mobile) with a sticky child.
+ * prefers-reduced-motion: a static stacked story list, no scrub, no dive.
+ *
+ * Expects `/tandir-360.mp4` in `public/`. The offline single-file demo
+ * injects the video as a data URI via `window.__TANDIR_DATA__` so no
+ * separate file is needed. If neither exists, an ember-glow fallback
+ * keeps the section looking intentional.
  */
 
-// `BASE_URL` resolves to "/" in a normal build and "./" in the offline
-// hash-routed demo, so the src works both when served from a web root and
-// when opened straight from disk.
-const VIDEO_SRC = `${import.meta.env.BASE_URL}tandir-360.mp4`;
+declare global {
+  interface Window {
+    __TANDIR_DATA__?: string;
+  }
+}
+
+// Preference order: inlined data URI (single-file demo) → static file.
+// `BASE_URL` resolves to "/" in a normal build and "./" in the offline demo.
+const VIDEO_SRC =
+  (typeof window !== "undefined" && window.__TANDIR_DATA__) ||
+  `${import.meta.env.BASE_URL}tandir-360.mp4`;
 const POSTER_SRC = `${import.meta.env.BASE_URL}tandir-poster.jpg`;
+
+// Scroll-progress keyframes for the three acts.
+const SPIN_END = 0.55; // video scrub completes here (mouth faces camera)
+const DIVE_END = 0.92; // scale/zoom into the mouth completes here
+// Oven-mouth position in the video's final frame (measured from the asset).
+const MOUTH_X = 60; // %
+const MOUTH_Y = 51; // %
+
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+const smooth = (n: number) => n * n * (3 - 2 * n); // smoothstep
 
 export function CinematicIntro() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -59,7 +83,9 @@ export function CinematicIntro() {
       latestProgress = p;
       const v = videoRef.current;
       if (v && Number.isFinite(v.duration) && v.duration > 0) {
-        targetTime = p * v.duration;
+        // Full rotation completes by SPIN_END; during the dive the video
+        // holds its final frame (mouth facing the camera, fire visible).
+        targetTime = clamp01(p / SPIN_END) * (v.duration - 0.05);
       }
     }
 
@@ -97,21 +123,32 @@ export function CinematicIntro() {
     };
   }, [reducedMotion]);
 
-  const { videoScale, blackOpacity, storyOpacity, chevronOpacity } = useMemo(() => {
-    // 0–85%: story panels visible. 85–100%: video scales + fades to black.
-    const scaleT = Math.max(0, Math.min(1, (progress - 0.85) / 0.15));
-    // Story panels' overall opacity multiplier — fades all panels out together
-    // at the end so the black-out never fights an in-flight panel transition.
-    const story = 1 - scaleT;
-    // Chevron only during the first panel; fade before the second appears.
-    const chev = Math.max(0, 1 - progress / 0.12);
-    return {
-      videoScale: 1 + scaleT * 0.15,
-      blackOpacity: scaleT,
-      storyOpacity: story,
-      chevronOpacity: chev,
-    };
-  }, [progress]);
+  const { dive, videoScale, tx, ty, fireOpacity, darkOpacity, storyOpacity, chevronOpacity } =
+    useMemo(() => {
+      // DIVE: fly into the oven mouth between SPIN_END and DIVE_END.
+      const d = smooth(clamp01((progress - SPIN_END) / (DIVE_END - SPIN_END)));
+      // Scale 1 → 9 around the mouth, while translating the mouth to the
+      // middle of the screen so we end up "inside" the fire.
+      const scale = 1 + d * 8;
+      // FIRE FLASH: brightens as the mouth fills the viewport.
+      const fire = smooth(clamp01((progress - 0.68) / 0.2));
+      // LANDING: settle from fire into the menu's dark charcoal.
+      const dark = smooth(clamp01((progress - 0.86) / 0.14));
+      // Story panels live in the spin act only.
+      const story = 1 - clamp01((progress - 0.48) / 0.08);
+      // Chevron only during the first panel.
+      const chev = Math.max(0, 1 - progress / 0.1);
+      return {
+        dive: d,
+        videoScale: scale,
+        tx: (50 - MOUTH_X) * d, // % of the element, applied after scaling
+        ty: (50 - MOUTH_Y) * d,
+        fireOpacity: fire,
+        darkOpacity: dark,
+        storyOpacity: story,
+        chevronOpacity: chev,
+      };
+    }, [progress]);
 
   // ── Reduced motion: same story, no scrubbing — a static stacked list ────
   if (reducedMotion) {
@@ -147,7 +184,9 @@ export function CinematicIntro() {
         <FireGlow />
 
         {/* Video + fallback: flex-centered wrapper so the transform-scale
-            doesn't fight Tailwind translate utilities. */}
+            doesn't fight Tailwind translate utilities. During the dive the
+            transform-origin sits on the oven mouth and the translate pulls
+            that point to the middle of the screen — flying INTO the fire. */}
         <div className="absolute inset-0 flex items-center justify-center">
           <video
             ref={videoRef}
@@ -162,10 +201,13 @@ export function CinematicIntro() {
               "max-h-[85vh] max-w-[90vw] object-contain will-change-transform",
               !videoReady && "hidden",
             )}
-            style={{ transform: `scale(${videoScale})` }}
+            style={{
+              transform: `translate(${tx}%, ${ty}%) scale(${videoScale})`,
+              transformOrigin: `${MOUTH_X}% ${MOUTH_Y}%`,
+            }}
             aria-hidden
           />
-          {!videoReady && <TandirFallback scale={videoScale} />}
+          {!videoReady && <TandirFallback scale={videoScale} dive={dive} />}
         </div>
 
         {/* Scroll-driven 3D story panels */}
@@ -191,10 +233,21 @@ export function CinematicIntro() {
           <ChevronDown className="size-6 kd-chevron-bounce" />
         </div>
 
-        {/* Fade to black at the very end (85–100%) */}
+        {/* FIRE FLASH — the screen fills with fire as we enter the mouth */}
         <div
-          className="pointer-events-none absolute inset-0 bg-black"
-          style={{ opacity: blackOpacity }}
+          className="pointer-events-none absolute inset-0 z-20"
+          style={{
+            opacity: fireOpacity,
+            background:
+              "radial-gradient(circle at 50% 50%, rgba(255,214,150,0.95) 0%, rgba(255,140,42,0.92) 28%, rgba(255,77,31,0.9) 52%, rgba(58,16,5,0.95) 78%, rgba(13,10,8,1) 100%)",
+          }}
+          aria-hidden
+        />
+
+        {/* LANDING — settle from fire into the menu's dark charcoal */}
+        <div
+          className="pointer-events-none absolute inset-0 z-30 bg-[#0d0a08]"
+          style={{ opacity: darkOpacity }}
           aria-hidden
         />
       </div>
@@ -219,7 +272,7 @@ const STORY_PANELS: StoryPanelSpec[] = [
   {
     // Peak at page load so the tagline lands full-strength on first paint.
     center: 0.0,
-    half: 0.13,
+    half: 0.1,
     eyebrow: "Kral Durum · To Go",
     headline: (
       <>
@@ -231,8 +284,8 @@ const STORY_PANELS: StoryPanelSpec[] = [
     sub: "Houtskool gegrilde durum, verse lavash en huisgemaakte sauzen.",
   },
   {
-    center: 0.22,
-    half: 0.08,
+    center: 0.13,
+    half: 0.06,
     eyebrow: "Het verhaal",
     headline: (
       <>
@@ -244,8 +297,8 @@ const STORY_PANELS: StoryPanelSpec[] = [
     sub: "Elke spies op echte houtskool — geen kortere weg, alleen vlam.",
   },
   {
-    center: 0.40,
-    half: 0.08,
+    center: 0.25,
+    half: 0.06,
     eyebrow: "Het ambacht",
     headline: (
       <>
@@ -257,8 +310,8 @@ const STORY_PANELS: StoryPanelSpec[] = [
     sub: "Vers gebakken, elke ochtend. Zoals het thuis hoort.",
   },
   {
-    center: 0.58,
-    half: 0.08,
+    center: 0.37,
+    half: 0.06,
     eyebrow: "In Den Haag",
     headline: (
       <>
@@ -269,8 +322,8 @@ const STORY_PANELS: StoryPanelSpec[] = [
     sub: "€1,50 binnen 2 km · €2,50 binnen 5 km. Afhalen kan altijd.",
   },
   {
-    center: 0.75,
-    half: 0.08,
+    center: 0.48,
+    half: 0.06,
     eyebrow: "★★★★★  ·  Google 5.0",
     headline: (
       <>
@@ -345,7 +398,9 @@ function FireGlow() {
 }
 
 /** Molten silhouette that stands in for the tandır until the mp4 is shipped. */
-function TandirFallback({ scale }: { scale: number }) {
+function TandirFallback({ scale, dive }: { scale: number; dive: number }) {
+  // Its "fire" sits at 50% 40% — the dive scales around that point so the
+  // molten core fills the screen, mirroring the video's mouth-zoom.
   return (
     <div
       className="pointer-events-none aspect-square w-[62vh] max-w-[82vw] rounded-full will-change-transform"
@@ -354,7 +409,8 @@ function TandirFallback({ scale }: { scale: number }) {
           "radial-gradient(circle at 50% 40%, #ffb347 0%, #ff6a20 22%, #b73513 45%, #3a1005 74%, #000 100%)",
         boxShadow:
           "0 0 60px 10px rgba(255,120,40,0.35), inset 0 0 60px rgba(0,0,0,0.55)",
-        transform: `scale(${scale})`,
+        transform: `translate(0%, ${10 * dive}%) scale(${scale})`,
+        transformOrigin: "50% 40%",
         filter: "blur(0.5px)",
       }}
       aria-hidden
