@@ -2,12 +2,16 @@ import { useEffect, useRef } from "react";
 
 /**
  * Lightweight canvas particle system: ~60 glowing ember shards drifting
- * upward with a small horizontal sway, fading near the top. Paints itself
- * absolutely inside its parent (which must be `position: relative`).
+ * upward with a small horizontal sway, fading near the top.
  *
- * • Paused via IntersectionObserver when off-screen.
- * • Disabled entirely under prefers-reduced-motion.
- * • DPR-aware and resizes with its parent (ResizeObserver).
+ * PERFORMANCE:
+ * • The canvas is a sticky, viewport-sized layer inside its (tall) parent —
+ *   NOT a canvas the size of the whole section, which would be enormous.
+ * • Glows are pre-rendered radial-gradient sprites drawn with drawImage —
+ *   roughly an order of magnitude cheaper than per-particle shadowBlur.
+ * • Device-pixel ratio is capped at 1.5 for this decorative layer.
+ * • The rAF loop pauses via IntersectionObserver when off-screen and the
+ *   whole component is inert under prefers-reduced-motion.
  */
 export function EmberField({ count = 60 }: { count?: number } = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -20,15 +24,28 @@ export function EmberField({ count = 60 }: { count?: number } = {}) {
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     if (prefersReduced) return;
 
-    const parent = canvas.parentElement;
-    if (!parent) return;
-
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(1.5, window.devicePixelRatio || 1);
     let w = 0;
     let h = 0;
+
+    // Pre-rendered glow sprites (one per ember colour).
+    function makeSprite(rgb: string): HTMLCanvasElement {
+      const s = document.createElement("canvas");
+      const R = 24;
+      s.width = s.height = R * 2;
+      const c = s.getContext("2d")!;
+      const g = c.createRadialGradient(R, R, 0, R, R, R);
+      g.addColorStop(0, `rgba(${rgb},1)`);
+      g.addColorStop(0.35, `rgba(${rgb},0.5)`);
+      g.addColorStop(1, `rgba(${rgb},0)`);
+      c.fillStyle = g;
+      c.fillRect(0, 0, R * 2, R * 2);
+      return s;
+    }
+    const sprites = [makeSprite("255,77,31"), makeSprite("255,179,71")]; // #ff4d1f, #ffb347
 
     interface Ember {
       x: number;
@@ -37,7 +54,7 @@ export function EmberField({ count = 60 }: { count?: number } = {}) {
       sway: number;
       swayOffset: number;
       size: number;
-      color: string;
+      sprite: number;
       life: number;
       maxLife: number;
     }
@@ -52,19 +69,18 @@ export function EmberField({ count = 60 }: { count?: number } = {}) {
         sway: 0.3 + Math.random() * 0.9,
         swayOffset: Math.random() * Math.PI * 2,
         size: 2 + Math.random() * 4,
-        color: Math.random() < 0.6 ? "#ff4d1f" : "#ffb347",
+        sprite: Math.random() < 0.6 ? 0 : 1,
         life: 0,
         maxLife: 600 + Math.random() * 900,
       };
     }
 
     function resize() {
-      w = parent!.clientWidth;
-      h = parent!.clientHeight;
+      // The canvas itself is the sticky, viewport-sized box.
+      w = canvas!.clientWidth;
+      h = canvas!.clientHeight;
       canvas!.width = Math.max(1, Math.floor(w * dpr));
       canvas!.height = Math.max(1, Math.floor(h * dpr));
-      canvas!.style.width = w + "px";
-      canvas!.style.height = h + "px";
       ctx!.setTransform(1, 0, 0, 1, 0, 0);
       ctx!.scale(dpr, dpr);
     }
@@ -107,17 +123,12 @@ export function EmberField({ count = 60 }: { count?: number } = {}) {
         const alpha = Math.max(0, topFactor * lifeFactor);
         if (alpha <= 0.01) continue;
 
-        ctx!.beginPath();
-        ctx!.fillStyle = e.color;
-        ctx!.globalAlpha = alpha * 0.85;
-        ctx!.shadowColor = e.color;
-        ctx!.shadowBlur = 14;
-        ctx!.arc(e.x, e.y, e.size, 0, Math.PI * 2);
-        ctx!.fill();
+        const r = e.size * 3; // sprite radius incl. glow halo
+        ctx!.globalAlpha = alpha * 0.9;
+        ctx!.drawImage(sprites[e.sprite], e.x - r, e.y - r, r * 2, r * 2);
       }
 
       ctx!.globalAlpha = 1;
-      ctx!.shadowBlur = 0;
       ctx!.globalCompositeOperation = "source-over";
 
       if (running) rafId = requestAnimationFrame(frame);
@@ -144,7 +155,7 @@ export function EmberField({ count = 60 }: { count?: number } = {}) {
       resize();
       seed();
     });
-    ro.observe(parent);
+    ro.observe(canvas);
 
     rafId = requestAnimationFrame(frame);
 
@@ -157,10 +168,10 @@ export function EmberField({ count = 60 }: { count?: number } = {}) {
   }, [count]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="pointer-events-none absolute inset-0 h-full w-full"
-      aria-hidden
-    />
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+      {/* Sticky viewport-sized layer: embers ride along while the tall menu
+          section scrolls past, at a fraction of the fill cost. */}
+      <canvas ref={canvasRef} className="sticky top-0 block h-screen w-full" />
+    </div>
   );
 }

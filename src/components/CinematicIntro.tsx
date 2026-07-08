@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,13 @@ import { cn } from "@/lib/utils";
  * 3. LANDING (86–100%): the flash settles into the menu section's dark
  *    charcoal (#0d0a08) so the unpin hands off seamlessly — the menu
  *    "appears out of the fire".
+ *
+ * PERFORMANCE: all scroll-driven styling is written straight to the DOM
+ * inside a single rAF loop — React does NOT re-render during scrolling.
+ * The loop pauses entirely (IntersectionObserver) when the section is
+ * off-screen, and skips DOM writes when progress hasn't changed. The video
+ * asset is encoded all-intra (`ffmpeg -g 1`) so currentTime seeks decode
+ * exactly one frame.
  *
  * Section is 300vh tall (200vh on mobile) with a sticky child.
  * prefers-reduced-motion: a static stacked story list, no scrub, no dive.
@@ -49,7 +56,13 @@ const smooth = (n: number) => n * n * (3 - 2 * n); // smoothstep
 export function CinematicIntro() {
   const sectionRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [progress, setProgress] = useState(0);
+  const fallbackRef = useRef<HTMLDivElement>(null);
+  const storyWrapRef = useRef<HTMLDivElement>(null);
+  const chevronRef = useRef<HTMLDivElement>(null);
+  const fireRef = useRef<HTMLDivElement>(null);
+  const darkRef = useRef<HTMLDivElement>(null);
+  const panelRefs = useRef<(HTMLDivElement | null)[]>([]);
+
   const [reducedMotion, setReducedMotion] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
 
@@ -62,17 +75,19 @@ export function CinematicIntro() {
     return () => mq.removeEventListener?.("change", listener);
   }, []);
 
-  // Scroll-scrub rAF loop with lerp smoothing.
+  // One rAF loop drives everything: video scrub (lerped) + all transforms
+  // and opacities, written directly to the DOM. No setState in the hot path.
   useEffect(() => {
     if (reducedMotion) return;
     const section = sectionRef.current;
     if (!section) return;
 
     let rafId = 0;
-    let mounted = true;
+    let running = false;
     let currentTime = 0;
     let targetTime = 0;
     let latestProgress = 0;
+    let appliedProgress = -1;
 
     function readScroll() {
       if (!section) return;
@@ -89,16 +104,58 @@ export function CinematicIntro() {
       }
     }
 
+    /** Write every scroll-driven style for progress `p` straight to the DOM. */
+    function apply(p: number) {
+      const d = smooth(clamp01((p - SPIN_END) / (DIVE_END - SPIN_END)));
+      const scale = 1 + d * 8;
+
+      const v = videoRef.current;
+      if (v) {
+        v.style.transform = `translate(${(50 - MOUTH_X) * d}%, ${(50 - MOUTH_Y) * d}%) scale(${scale})`;
+      }
+      const fb = fallbackRef.current;
+      if (fb) {
+        fb.style.transform = `translate(0%, ${10 * d}%) scale(${scale})`;
+      }
+      if (fireRef.current) {
+        fireRef.current.style.opacity = String(smooth(clamp01((p - 0.68) / 0.2)));
+      }
+      if (darkRef.current) {
+        darkRef.current.style.opacity = String(smooth(clamp01((p - 0.86) / 0.14)));
+      }
+
+      const story = 1 - clamp01((p - 0.48) / 0.08);
+      if (storyWrapRef.current) storyWrapRef.current.style.opacity = String(story);
+      if (chevronRef.current) {
+        chevronRef.current.style.opacity = String(Math.max(0, 1 - p / 0.1) * story);
+      }
+
+      for (let i = 0; i < STORY_PANELS.length; i++) {
+        const el = panelRefs.current[i];
+        if (!el) continue;
+        const panel = STORY_PANELS[i];
+        const signed = (p - panel.center) / panel.half;
+        const abs = Math.min(1, Math.abs(signed));
+        const opacity = 1 - abs * abs * (3 - 2 * abs); // smoothstep falloff
+        if (opacity <= 0.001) {
+          if (el.style.visibility !== "hidden") el.style.visibility = "hidden";
+          continue;
+        }
+        const clamped = Math.max(-1, Math.min(1, signed));
+        el.style.visibility = "visible";
+        el.style.opacity = String(opacity);
+        el.style.transform = `translateZ(${-140 * abs}px) rotateY(${clamped * -22}deg)`;
+      }
+    }
+
     function tick() {
-      if (!mounted) return;
+      if (!running) return;
       const v = videoRef.current;
       if (v && Number.isFinite(v.duration) && v.duration > 0) {
-        // Lerp toward the target — 0.18 is a good compromise between
-        // responsiveness and smoothness across trackpad + wheel + touch.
+        // Lerp toward the target — smooth across trackpad, wheel and touch.
         currentTime += (targetTime - currentTime) * 0.18;
-        // Only write when the delta is meaningful; setting currentTime on
-        // every frame causes stutter on Safari.
-        if (Math.abs(v.currentTime - currentTime) > 1 / 60) {
+        // All-intra encode makes seeks cheap, but still skip sub-frame deltas.
+        if (Math.abs(v.currentTime - currentTime) > 1 / 48) {
           try {
             v.currentTime = currentTime;
           } catch {
@@ -106,49 +163,48 @@ export function CinematicIntro() {
           }
         }
       }
-      setProgress(latestProgress);
+      // Only touch the DOM when scroll progress actually moved.
+      if (Math.abs(latestProgress - appliedProgress) > 0.0004) {
+        appliedProgress = latestProgress;
+        apply(latestProgress);
+      }
       rafId = requestAnimationFrame(tick);
     }
 
+    function start() {
+      if (running) return;
+      running = true;
+      readScroll();
+      rafId = requestAnimationFrame(tick);
+    }
+    function stop() {
+      running = false;
+      cancelAnimationFrame(rafId);
+    }
+
+    // The loop only runs while the pinned section is actually on screen.
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) start();
+        else stop();
+      }
+    });
+    io.observe(section);
+
     readScroll();
-    tick();
+    appliedProgress = latestProgress;
+    apply(latestProgress);
+    start();
     window.addEventListener("scroll", readScroll, { passive: true });
     window.addEventListener("resize", readScroll);
 
     return () => {
-      mounted = false;
-      cancelAnimationFrame(rafId);
+      stop();
+      io.disconnect();
       window.removeEventListener("scroll", readScroll);
       window.removeEventListener("resize", readScroll);
     };
   }, [reducedMotion]);
-
-  const { dive, videoScale, tx, ty, fireOpacity, darkOpacity, storyOpacity, chevronOpacity } =
-    useMemo(() => {
-      // DIVE: fly into the oven mouth between SPIN_END and DIVE_END.
-      const d = smooth(clamp01((progress - SPIN_END) / (DIVE_END - SPIN_END)));
-      // Scale 1 → 9 around the mouth, while translating the mouth to the
-      // middle of the screen so we end up "inside" the fire.
-      const scale = 1 + d * 8;
-      // FIRE FLASH: brightens as the mouth fills the viewport.
-      const fire = smooth(clamp01((progress - 0.68) / 0.2));
-      // LANDING: settle from fire into the menu's dark charcoal.
-      const dark = smooth(clamp01((progress - 0.86) / 0.14));
-      // Story panels live in the spin act only.
-      const story = 1 - clamp01((progress - 0.48) / 0.08);
-      // Chevron only during the first panel.
-      const chev = Math.max(0, 1 - progress / 0.1);
-      return {
-        dive: d,
-        videoScale: scale,
-        tx: (50 - MOUTH_X) * d, // % of the element, applied after scaling
-        ty: (50 - MOUTH_Y) * d,
-        fireOpacity: fire,
-        darkOpacity: dark,
-        storyOpacity: story,
-        chevronOpacity: chev,
-      };
-    }, [progress]);
 
   // ── Reduced motion: same story, no scrubbing — a static stacked list ────
   if (reducedMotion) {
@@ -201,33 +257,73 @@ export function CinematicIntro() {
               "max-h-[85vh] max-w-[90vw] object-contain will-change-transform",
               !videoReady && "hidden",
             )}
+            style={{ transformOrigin: `${MOUTH_X}% ${MOUTH_Y}%` }}
+            aria-hidden
+          />
+          {/* Molten stand-in until/unless the video can play. Its "fire"
+              sits at 50% 40% — the dive scales around that point. */}
+          <div
+            ref={fallbackRef}
+            className={cn(
+              "pointer-events-none aspect-square w-[62vh] max-w-[82vw] rounded-full will-change-transform",
+              videoReady && "hidden",
+            )}
             style={{
-              transform: `translate(${tx}%, ${ty}%) scale(${videoScale})`,
-              transformOrigin: `${MOUTH_X}% ${MOUTH_Y}%`,
+              background:
+                "radial-gradient(circle at 50% 40%, #ffb347 0%, #ff6a20 22%, #b73513 45%, #3a1005 74%, #000 100%)",
+              boxShadow:
+                "0 0 60px 10px rgba(255,120,40,0.35), inset 0 0 60px rgba(0,0,0,0.55)",
+              transformOrigin: "50% 40%",
+              filter: "blur(0.5px)",
             }}
             aria-hidden
           />
-          {!videoReady && <TandirFallback scale={videoScale} dive={dive} />}
         </div>
 
-        {/* Scroll-driven 3D story panels */}
+        {/* Scroll-driven 3D story panels (styles written by the rAF loop) */}
         <div
+          ref={storyWrapRef}
           className="pointer-events-none absolute inset-0 z-10"
-          style={{
-            perspective: "1200px",
-            perspectiveOrigin: "50% 45%",
-            opacity: storyOpacity,
-          }}
+          style={{ perspective: "1200px", perspectiveOrigin: "50% 45%" }}
         >
           {STORY_PANELS.map((panel, i) => (
-            <StoryPanel key={i} panel={panel} progress={progress} />
+            <div
+              key={i}
+              ref={(el) => {
+                panelRefs.current[i] = el;
+              }}
+              className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-white will-change-transform"
+              style={{
+                visibility: i === 0 ? "visible" : "hidden",
+                transformStyle: "preserve-3d",
+              }}
+            >
+              <p
+                className="mb-4 text-[11px] font-semibold uppercase tracking-[0.35em] text-royal-red"
+                style={{ textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}
+              >
+                {panel.eyebrow}
+              </p>
+              <h2
+                className="max-w-4xl font-serif text-4xl leading-tight sm:text-6xl md:text-7xl"
+                style={{ textShadow: "0 2px 24px rgba(0,0,0,0.75)" }}
+              >
+                {panel.headline}
+              </h2>
+              <p
+                className="mt-5 max-w-lg text-sm text-white/85 sm:text-base"
+                style={{ textShadow: "0 2px 14px rgba(0,0,0,0.7)" }}
+              >
+                {panel.sub}
+              </p>
+            </div>
           ))}
         </div>
 
         {/* Scroll chevron — only visible during the first panel */}
         <div
+          ref={chevronRef}
           className="pointer-events-none absolute inset-x-0 bottom-12 z-20 flex flex-col items-center gap-2 text-white/80"
-          style={{ opacity: chevronOpacity * storyOpacity }}
         >
           <span className="text-[10px] uppercase tracking-[0.4em]">Scroll</span>
           <ChevronDown className="size-6 kd-chevron-bounce" />
@@ -235,9 +331,10 @@ export function CinematicIntro() {
 
         {/* FIRE FLASH — the screen fills with fire as we enter the mouth */}
         <div
+          ref={fireRef}
           className="pointer-events-none absolute inset-0 z-20"
           style={{
-            opacity: fireOpacity,
+            opacity: 0,
             background:
               "radial-gradient(circle at 50% 50%, rgba(255,214,150,0.95) 0%, rgba(255,140,42,0.92) 28%, rgba(255,77,31,0.9) 52%, rgba(58,16,5,0.95) 78%, rgba(13,10,8,1) 100%)",
           }}
@@ -246,8 +343,9 @@ export function CinematicIntro() {
 
         {/* LANDING — settle from fire into the menu's dark charcoal */}
         <div
+          ref={darkRef}
           className="pointer-events-none absolute inset-0 z-30 bg-[#0d0a08]"
-          style={{ opacity: darkOpacity }}
+          style={{ opacity: 0 }}
           aria-hidden
         />
       </div>
@@ -255,7 +353,7 @@ export function CinematicIntro() {
   );
 }
 
-// ── Story panels: scroll-driven 3D restaurant info ─────────────────────────
+// ── Story panels: restaurant info revealed while the tandır spins ──────────
 
 type StoryPanelSpec = {
   /** Scroll-progress center (0..1) where this panel is fully forward. */
@@ -336,52 +434,6 @@ const STORY_PANELS: StoryPanelSpec[] = [
   },
 ];
 
-function StoryPanel({ panel, progress }: { panel: StoryPanelSpec; progress: number }) {
-  // Signed distance from the panel's center, in units of half-width.
-  const signed = (progress - panel.center) / panel.half;
-  const abs = Math.min(1, Math.abs(signed));
-  const clamped = Math.max(-1, Math.min(1, signed));
-
-  // Opacity: full at center, 0 past ±half-width. Cheap smoothstep for polish.
-  const opacity = 1 - abs * abs * (3 - 2 * abs);
-  if (opacity <= 0.001) return null;
-
-  // 3D transform: depth-pull from -140px → 0 → -140px, rotateY ±22° across
-  // the pass so it enters from the right and exits to the left.
-  const tz = -140 * abs;
-  const ry = clamped * -22;
-
-  return (
-    <div
-      className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-white will-change-transform"
-      style={{
-        opacity,
-        transform: `translateZ(${tz}px) rotateY(${ry}deg)`,
-        transformStyle: "preserve-3d",
-      }}
-    >
-      <p
-        className="mb-4 text-[11px] font-semibold uppercase tracking-[0.35em] text-royal-red"
-        style={{ textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}
-      >
-        {panel.eyebrow}
-      </p>
-      <h2
-        className="max-w-4xl font-serif text-4xl leading-tight sm:text-6xl md:text-7xl"
-        style={{ textShadow: "0 2px 24px rgba(0,0,0,0.75)" }}
-      >
-        {panel.headline}
-      </h2>
-      <p
-        className="mt-5 max-w-lg text-sm text-white/85 sm:text-base"
-        style={{ textShadow: "0 2px 14px rgba(0,0,0,0.7)" }}
-      >
-        {panel.sub}
-      </p>
-    </div>
-  );
-}
-
 // ── decorative helpers ─────────────────────────────────────────────────────
 
 function FireGlow() {
@@ -391,27 +443,6 @@ function FireGlow() {
       style={{
         background:
           "radial-gradient(ellipse at 50% 62%, rgba(255,140,50,0.28), transparent 55%), radial-gradient(circle at 50% 100%, rgba(255,77,31,0.35), transparent 60%)",
-      }}
-      aria-hidden
-    />
-  );
-}
-
-/** Molten silhouette that stands in for the tandır until the mp4 is shipped. */
-function TandirFallback({ scale, dive }: { scale: number; dive: number }) {
-  // Its "fire" sits at 50% 40% — the dive scales around that point so the
-  // molten core fills the screen, mirroring the video's mouth-zoom.
-  return (
-    <div
-      className="pointer-events-none aspect-square w-[62vh] max-w-[82vw] rounded-full will-change-transform"
-      style={{
-        background:
-          "radial-gradient(circle at 50% 40%, #ffb347 0%, #ff6a20 22%, #b73513 45%, #3a1005 74%, #000 100%)",
-        boxShadow:
-          "0 0 60px 10px rgba(255,120,40,0.35), inset 0 0 60px rgba(0,0,0,0.55)",
-        transform: `translate(0%, ${10 * dive}%) scale(${scale})`,
-        transformOrigin: "50% 40%",
-        filter: "blur(0.5px)",
       }}
       aria-hidden
     />
