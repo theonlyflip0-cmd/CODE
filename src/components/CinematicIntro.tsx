@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { InteractiveFlames } from "@/components/InteractiveFlames";
 
 /**
  * Full-viewport pinned scroll hero, in three acts:
@@ -279,6 +280,9 @@ export function CinematicIntro() {
             aria-hidden
           />
         </div>
+
+        {/* Interactive flames — move the cursor to stir the fire */}
+        <InteractiveFlames />
 
         {/* Scroll-driven 3D story panels (styles written by the rAF loop) */}
         <div
