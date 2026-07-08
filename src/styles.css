@@ -212,6 +212,37 @@ input[type="number"] {
   transform: translateY(0);
 }
 
+/* ── Ambient fire flicker (menu background, self-running) ────────────────── */
+@keyframes kd-flicker {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  20% {
+    opacity: 0.72;
+  }
+  38% {
+    opacity: 0.46;
+    transform: scale(1.015);
+  }
+  55% {
+    opacity: 0.66;
+  }
+  72% {
+    opacity: 0.5;
+    transform: scale(1.025);
+  }
+  86% {
+    opacity: 0.63;
+  }
+}
+.kd-flicker {
+  animation: kd-flicker 7s ease-in-out infinite;
+  transform-origin: 50% 100%;
+  will-change: opacity, transform;
+}
+
 /* ── Reduced-motion overrides ───────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -224,5 +255,9 @@ input[type="number"] {
   }
   .kd-chevron-bounce {
     animation: none;
+  }
+  .kd-flicker {
+    animation: none;
+    opacity: 0.55;
   }
 }

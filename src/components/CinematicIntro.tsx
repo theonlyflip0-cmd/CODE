@@ -1,34 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { InteractiveFlames } from "@/components/InteractiveFlames";
 
 /**
- * Full-viewport pinned scroll hero, in three acts:
+ * Autoplay tandır intro — NO scroll interaction.
  *
- * 1. SPIN (0–55%): scroll scrubs the 360° tandır video via currentTime with
- *    rAF + lerp smoothing while restaurant story panels pass by in 3D.
- * 2. DIVE (55–92%): the whole page flies INTO the oven mouth — the video
- *    scales 1→9 around the mouth's position (60% 51% in the final frame),
- *    which fills the screen with fire; a fire-flash overlay ramps in.
- * 3. LANDING (86–100%): the flash settles into the menu section's dark
- *    charcoal (#0d0a08) so the unpin hands off seamlessly — the menu
- *    "appears out of the fire".
+ * On load the intro is a fixed full-screen overlay: the 360° tandır video
+ * autoplays (muted, playsinline) start to finish on its own. When it reaches
+ * ~80% of its duration — while it's still finishing the spin — a fiery
+ * EXPLOSION bursts from the centre of the screen, fills it completely, then
+ * clears away to reveal the menu underneath. The overlay then unmounts.
  *
- * PERFORMANCE: all scroll-driven styling is written straight to the DOM
- * inside a single rAF loop — React does NOT re-render during scrolling.
- * The loop pauses entirely (IntersectionObserver) when the section is
- * off-screen, and skips DOM writes when progress hasn't changed. The video
- * asset is encoded all-intra (`ffmpeg -g 1`) so currentTime seeks decode
- * exactly one frame.
+ * Everything is CSS + one canvas (the explosion). No scroll, no pointer, no
+ * libraries. prefers-reduced-motion: skip the video motion + explosion and
+ * just cross-fade a static poster straight into the menu.
  *
- * Section is 300vh tall (200vh on mobile) with a sticky child.
- * prefers-reduced-motion: a static stacked story list, no scrub, no dive.
- *
- * Expects `/tandir-360.mp4` in `public/`. The offline single-file demo
- * injects the video as a data URI via `window.__TANDIR_DATA__` so no
- * separate file is needed. If neither exists, an ember-glow fallback
- * keeps the section looking intentional.
+ * Expects `/tandir-360.mp4` in `public/`. The offline single-file demo injects
+ * it as a data URI via `window.__TANDIR_DATA__`. If the video can't play
+ * (missing / undecodable), a timer still fires the explosion so the menu is
+ * always revealed, and a molten "ember disc" stands in visually.
  */
 
 declare global {
@@ -37,408 +26,298 @@ declare global {
   }
 }
 
-// Preference order: inlined data URI (single-file demo) → static file.
-// `BASE_URL` resolves to "/" in a normal build and "./" in the offline demo.
 const VIDEO_SRC =
   (typeof window !== "undefined" && window.__TANDIR_DATA__) ||
   `${import.meta.env.BASE_URL}tandir-360.mp4`;
 const POSTER_SRC = `${import.meta.env.BASE_URL}tandir-poster.jpg`;
 
-// Scroll-progress keyframes for the three acts.
-const SPIN_END = 0.55; // video scrub completes here (mouth faces camera)
-const DIVE_END = 0.92; // scale/zoom into the mouth completes here
-// Oven-mouth position in the video's final frame (measured from the asset).
-const MOUTH_X = 60; // %
-const MOUTH_Y = 51; // %
+const TRANSITION_AT = 0.8; // start exploding at 80% of the video
+const EXPLOSION_MS = 1500;
+const FALLBACK_MS = 3200; // fire the explosion anyway if the video never plays
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
-const smooth = (n: number) => n * n * (3 - 2 * n); // smoothstep
+const easeOut = (n: number) => 1 - Math.pow(1 - n, 3);
 
 export function CinematicIntro() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const fallbackRef = useRef<HTMLDivElement>(null);
-  const storyWrapRef = useRef<HTMLDivElement>(null);
-  const chevronRef = useRef<HTMLDivElement>(null);
-  const fireRef = useRef<HTMLDivElement>(null);
-  const darkRef = useRef<HTMLDivElement>(null);
-  const panelRefs = useRef<(HTMLDivElement | null)[]>([]);
-
+  const [done, setDone] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
 
-  // Detect reduced-motion preference once.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Detect reduced motion up front.
   useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReducedMotion(mq.matches);
-    const listener = () => setReducedMotion(mq.matches);
-    mq.addEventListener?.("change", listener);
-    return () => mq.removeEventListener?.("change", listener);
+    setReducedMotion(
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+    );
   }, []);
 
-  // One rAF loop drives everything: video scrub (lerped) + all transforms
-  // and opacities, written directly to the DOM. No setState in the hot path.
+  // Lock scrolling while the intro plays; always restore on unmount.
   useEffect(() => {
-    if (reducedMotion) return;
-    const section = sectionRef.current;
-    if (!section) return;
+    if (done) return;
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    window.scrollTo(0, 0);
+    html.style.overflow = "hidden";
+    return () => {
+      html.style.overflow = prev;
+    };
+  }, [done]);
 
-    let rafId = 0;
-    let running = false;
-    let currentTime = 0;
-    let targetTime = 0;
-    let latestProgress = 0;
-    let appliedProgress = -1;
+  // Main driver: autoplay → detect 80% → explode → reveal.
+  useEffect(() => {
+    if (done) return;
 
-    function readScroll() {
-      if (!section) return;
-      const rect = section.getBoundingClientRect();
-      const totalScroll = section.offsetHeight - window.innerHeight;
-      const scrolled = Math.max(0, -rect.top);
-      const p = totalScroll > 0 ? Math.min(1, scrolled / totalScroll) : 0;
-      latestProgress = p;
-      const v = videoRef.current;
-      if (v && Number.isFinite(v.duration) && v.duration > 0) {
-        // Full rotation completes by SPIN_END; during the dive the video
-        // holds its final frame (mouth facing the camera, fire visible).
-        targetTime = clamp01(p / SPIN_END) * (v.duration - 0.05);
-      }
+    let raf = 0;
+    let fallback = 0;
+    let exploded = false;
+
+    function finish() {
+      document.documentElement.style.overflow = "";
+      setDone(true);
     }
 
-    /** Write every scroll-driven style for progress `p` straight to the DOM. */
-    function apply(p: number) {
-      const d = smooth(clamp01((p - SPIN_END) / (DIVE_END - SPIN_END)));
-      const scale = 1 + d * 8;
-
-      const v = videoRef.current;
-      if (v) {
-        v.style.transform = `translate(${(50 - MOUTH_X) * d}%, ${(50 - MOUTH_Y) * d}%) scale(${scale})`;
-      }
-      const fb = fallbackRef.current;
-      if (fb) {
-        fb.style.transform = `translate(0%, ${10 * d}%) scale(${scale})`;
-      }
-      if (fireRef.current) {
-        fireRef.current.style.opacity = String(smooth(clamp01((p - 0.68) / 0.2)));
-      }
-      if (darkRef.current) {
-        darkRef.current.style.opacity = String(smooth(clamp01((p - 0.86) / 0.14)));
-      }
-
-      const story = 1 - clamp01((p - 0.48) / 0.08);
-      if (storyWrapRef.current) storyWrapRef.current.style.opacity = String(story);
-      if (chevronRef.current) {
-        chevronRef.current.style.opacity = String(Math.max(0, 1 - p / 0.1) * story);
-      }
-
-      for (let i = 0; i < STORY_PANELS.length; i++) {
-        const el = panelRefs.current[i];
-        if (!el) continue;
-        const panel = STORY_PANELS[i];
-        const signed = (p - panel.center) / panel.half;
-        const abs = Math.min(1, Math.abs(signed));
-        const opacity = 1 - abs * abs * (3 - 2 * abs); // smoothstep falloff
-        if (opacity <= 0.001) {
-          if (el.style.visibility !== "hidden") el.style.visibility = "hidden";
-          continue;
+    // ── Reduced motion: just cross-fade the static poster into the menu ────
+    if (reducedMotion) {
+      const t = window.setTimeout(() => {
+        if (rootRef.current) {
+          rootRef.current.style.transition = "opacity 700ms ease";
+          rootRef.current.style.opacity = "0";
         }
-        const clamped = Math.max(-1, Math.min(1, signed));
-        el.style.visibility = "visible";
-        el.style.opacity = String(opacity);
-        el.style.transform = `translateZ(${-140 * abs}px) rotateY(${clamped * -22}deg)`;
-      }
+      }, 600);
+      const d = window.setTimeout(finish, 1400);
+      return () => {
+        window.clearTimeout(t);
+        window.clearTimeout(d);
+      };
     }
 
-    function tick() {
-      if (!running) return;
-      const v = videoRef.current;
-      if (v && Number.isFinite(v.duration) && v.duration > 0) {
-        // Lerp toward the target — smooth across trackpad, wheel and touch.
-        currentTime += (targetTime - currentTime) * 0.18;
-        // All-intra encode makes seeks cheap, but still skip sub-frame deltas.
-        if (Math.abs(v.currentTime - currentTime) > 1 / 48) {
-          try {
-            v.currentTime = currentTime;
-          } catch {
-            /* ignore — happens briefly when metadata isn't ready */
+    // ── The explosion ──────────────────────────────────────────────────────
+    function explode() {
+      if (exploded) return;
+      exploded = true;
+      window.clearTimeout(fallback);
+
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext("2d");
+      const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+      let w = 0;
+      let h = 0;
+
+      // Pre-render one warm glow sprite for the flying embers.
+      const sprite = document.createElement("canvas");
+      {
+        const R = 32;
+        sprite.width = sprite.height = R * 2;
+        const c = sprite.getContext("2d")!;
+        const g = c.createRadialGradient(R, R, 0, R, R, R);
+        g.addColorStop(0, "rgba(255,244,214,1)");
+        g.addColorStop(0.3, "rgba(255,170,60,0.85)");
+        g.addColorStop(1, "rgba(150,30,6,0)");
+        c.fillStyle = g;
+        c.fillRect(0, 0, R * 2, R * 2);
+      }
+
+      interface P {
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+        size: number;
+      }
+      const parts: P[] = [];
+
+      function size() {
+        if (!canvas) return;
+        w = window.innerWidth;
+        h = window.innerHeight;
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+        ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      size();
+
+      const cx = w / 2;
+      const cy = h / 2;
+      const maxR = Math.hypot(w, h) / 2;
+      const N = Math.round(clamp01(Math.min(w, h) / 900) * 70) + 90; // ~90–160
+      for (let i = 0; i < N; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const spd = 6 + Math.random() * (maxR / 26);
+        parts.push({
+          x: cx,
+          y: cy,
+          vx: Math.cos(a) * spd,
+          vy: Math.sin(a) * spd,
+          size: 4 + Math.random() * 10,
+        });
+      }
+
+      const start = performance.now();
+
+      function frame(now: number) {
+        const e = clamp01((now - start) / EXPLOSION_MS);
+
+        // Reveal the menu: fade the hero (black + video) out fast.
+        if (heroRef.current) {
+          heroRef.current.style.opacity = String(1 - clamp01(e / 0.35));
+        }
+
+        if (ctx) {
+          ctx.clearRect(0, 0, w, h);
+
+          // Central flash: expands to fill the screen, then fades out.
+          const fr = easeOut(clamp01(e / 0.28)) * maxR * 1.15;
+          const fa = e < 0.28 ? 1 : Math.max(0, 1 - (e - 0.28) / 0.72);
+          if (fa > 0.001 && fr > 1) {
+            const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, fr);
+            g.addColorStop(0, `rgba(255,250,235,${fa})`);
+            g.addColorStop(0.28, `rgba(255,196,96,${fa})`);
+            g.addColorStop(0.6, `rgba(255,96,28,${fa * 0.9})`);
+            g.addColorStop(1, "rgba(90,18,4,0)");
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, w, h);
           }
+
+          // Flying embers.
+          ctx.globalCompositeOperation = "lighter";
+          const pa = Math.max(0, 1 - clamp01((e - 0.15) / 0.85));
+          for (const p of parts) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.05;
+            p.vx *= 0.99;
+            const r = p.size * (1 + e * 1.5);
+            ctx.globalAlpha = pa;
+            ctx.drawImage(sprite, p.x - r, p.y - r, r * 2, r * 2);
+          }
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = "source-over";
         }
+
+        if (e >= 1) {
+          finish();
+          return;
+        }
+        raf = requestAnimationFrame(frame);
       }
-      // Only touch the DOM when scroll progress actually moved.
-      if (Math.abs(latestProgress - appliedProgress) > 0.0004) {
-        appliedProgress = latestProgress;
-        apply(latestProgress);
-      }
-      rafId = requestAnimationFrame(tick);
+      raf = requestAnimationFrame(frame);
     }
 
-    function start() {
-      if (running) return;
-      running = true;
-      readScroll();
-      rafId = requestAnimationFrame(tick);
+    // Autoplay the video and watch for the 80% mark.
+    const v = videoRef.current;
+    function onTime() {
+      if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
+      if (v.currentTime / v.duration >= TRANSITION_AT) explode();
     }
-    function stop() {
-      running = false;
-      cancelAnimationFrame(rafId);
+    if (v) {
+      v.muted = true;
+      v.addEventListener("timeupdate", onTime);
+      v.addEventListener("ended", explode);
+      v.play().catch(() => {
+        /* autoplay blocked / codec issue — the fallback timer covers us */
+      });
     }
-
-    // The loop only runs while the pinned section is actually on screen.
-    const io = new IntersectionObserver((entries) => {
-      for (const e of entries) {
-        if (e.isIntersecting) start();
-        else stop();
-      }
-    });
-    io.observe(section);
-
-    readScroll();
-    appliedProgress = latestProgress;
-    apply(latestProgress);
-    start();
-    window.addEventListener("scroll", readScroll, { passive: true });
-    window.addEventListener("resize", readScroll);
+    // Safety net: if the video never reaches 80% (blocked, undecodable…),
+    // explode anyway so the menu is always revealed with no input required.
+    fallback = window.setTimeout(explode, FALLBACK_MS);
 
     return () => {
-      stop();
-      io.disconnect();
-      window.removeEventListener("scroll", readScroll);
-      window.removeEventListener("resize", readScroll);
+      cancelAnimationFrame(raf);
+      window.clearTimeout(fallback);
+      if (v) {
+        v.removeEventListener("timeupdate", onTime);
+        v.removeEventListener("ended", explode);
+      }
     };
-  }, [reducedMotion]);
+  }, [reducedMotion, done]);
 
-  // ── Reduced motion: same story, no scrubbing — a static stacked list ────
-  if (reducedMotion) {
-    return (
-      <section className="relative overflow-hidden bg-black text-white">
-        <FireGlow />
-        <div className="relative mx-auto flex max-w-4xl flex-col items-center gap-14 px-6 py-24 text-center sm:gap-20 sm:py-28">
-          {STORY_PANELS.map((panel, i) => (
-            <div key={i} className="flex flex-col items-center">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.35em] text-royal-red">
-                {panel.eyebrow}
-              </p>
-              <h2 className="max-w-3xl font-serif text-3xl leading-tight sm:text-5xl">
-                {panel.headline}
-              </h2>
-              <p className="mt-4 max-w-md text-sm text-white/80 sm:text-base">{panel.sub}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-  }
+  if (done) return null;
 
-  // ── Cinematic scrub hero ──────────────────────────────────────────────────
   return (
-    <section
-      ref={sectionRef}
+    <div
+      ref={rootRef}
       aria-label="Kral Durum tandır intro"
-      className="relative bg-black h-[200vh] md:h-[300vh]"
+      className="fixed inset-0 z-[60] overflow-hidden"
     >
-      <div className="sticky top-0 h-screen w-full overflow-hidden bg-black">
-        {/* Ember glow behind the video/fallback */}
+      {/* Hero layer (black + video + tagline) — fades out during the blast */}
+      <div ref={heroRef} className="absolute inset-0 bg-black">
         <FireGlow />
 
-        {/* Video + fallback: flex-centered wrapper so the transform-scale
-            doesn't fight Tailwind translate utilities. During the dive the
-            transform-origin sits on the oven mouth and the translate pulls
-            that point to the middle of the screen — flying INTO the fire. */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <video
-            ref={videoRef}
-            src={VIDEO_SRC}
-            poster={POSTER_SRC}
-            muted
-            playsInline
-            preload="auto"
-            onLoadedMetadata={() => setVideoReady(true)}
-            onError={() => setVideoReady(false)}
-            className={cn(
-              "max-h-[85vh] max-w-[90vw] object-contain will-change-transform",
-              !videoReady && "hidden",
-            )}
-            style={{ transformOrigin: `${MOUTH_X}% ${MOUTH_Y}%` }}
-            aria-hidden
-          />
-          {/* Molten stand-in until/unless the video can play. Its "fire"
-              sits at 50% 40% — the dive scales around that point. */}
-          <div
-            ref={fallbackRef}
-            className={cn(
-              "pointer-events-none aspect-square w-[62vh] max-w-[82vw] rounded-full will-change-transform",
-              videoReady && "hidden",
-            )}
-            style={{
-              background:
-                "radial-gradient(circle at 50% 40%, #ffb347 0%, #ff6a20 22%, #b73513 45%, #3a1005 74%, #000 100%)",
-              boxShadow:
-                "0 0 60px 10px rgba(255,120,40,0.35), inset 0 0 60px rgba(0,0,0,0.55)",
-              transformOrigin: "50% 40%",
-              filter: "blur(0.5px)",
-            }}
-            aria-hidden
-          />
-        </div>
+          {!reducedMotion ? (
+            <video
+              ref={videoRef}
+              src={VIDEO_SRC}
+              poster={POSTER_SRC}
+              autoPlay
+              muted
+              playsInline
+              preload="auto"
+              onLoadedMetadata={() => setVideoReady(true)}
+              onError={() => setVideoReady(false)}
+              className={cn(
+                "max-h-[85vh] max-w-[92vw] object-contain",
+                !videoReady && "hidden",
+              )}
+              aria-hidden
+            />
+          ) : (
+            <img
+              src={POSTER_SRC}
+              alt=""
+              className="max-h-[85vh] max-w-[92vw] object-contain"
+              aria-hidden
+            />
+          )}
 
-        {/* Interactive flames — move the cursor to stir the fire */}
-        <InteractiveFlames />
-
-        {/* Scroll-driven 3D story panels (styles written by the rAF loop) */}
-        <div
-          ref={storyWrapRef}
-          className="pointer-events-none absolute inset-0 z-10"
-          style={{ perspective: "1200px", perspectiveOrigin: "50% 45%" }}
-        >
-          {STORY_PANELS.map((panel, i) => (
+          {/* Molten stand-in until/unless the video paints */}
+          {!reducedMotion && !videoReady && (
             <div
-              key={i}
-              ref={(el) => {
-                panelRefs.current[i] = el;
-              }}
-              className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center text-white will-change-transform"
+              className="pointer-events-none aspect-square w-[60vh] max-w-[82vw] rounded-full"
               style={{
-                visibility: i === 0 ? "visible" : "hidden",
-                transformStyle: "preserve-3d",
+                background:
+                  "radial-gradient(circle at 50% 42%, #ffb347 0%, #ff6a20 22%, #b73513 45%, #3a1005 74%, #000 100%)",
+                boxShadow:
+                  "0 0 60px 10px rgba(255,120,40,0.35), inset 0 0 60px rgba(0,0,0,0.55)",
+                filter: "blur(0.5px)",
               }}
-            >
-              <p
-                className="mb-4 text-[11px] font-semibold uppercase tracking-[0.35em] text-royal-red"
-                style={{ textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}
-              >
-                {panel.eyebrow}
-              </p>
-              <h2
-                className="max-w-4xl font-serif text-4xl leading-tight sm:text-6xl md:text-7xl"
-                style={{ textShadow: "0 2px 24px rgba(0,0,0,0.75)" }}
-              >
-                {panel.headline}
-              </h2>
-              <p
-                className="mt-5 max-w-lg text-sm text-white/85 sm:text-base"
-                style={{ textShadow: "0 2px 14px rgba(0,0,0,0.7)" }}
-              >
-                {panel.sub}
-              </p>
-            </div>
-          ))}
+              aria-hidden
+            />
+          )}
         </div>
 
-        {/* Scroll chevron — only visible during the first panel */}
-        <div
-          ref={chevronRef}
-          className="pointer-events-none absolute inset-x-0 bottom-12 z-20 flex flex-col items-center gap-2 text-white/80"
-        >
-          <span className="text-[10px] uppercase tracking-[0.4em]">Scroll</span>
-          <ChevronDown className="size-6 kd-chevron-bounce" />
+        {/* Tagline */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+          <p
+            className="mb-4 text-[11px] font-semibold uppercase tracking-[0.35em] text-royal-red"
+            style={{ textShadow: "0 2px 12px rgba(0,0,0,0.6)" }}
+          >
+            Kral Durum · To Go
+          </p>
+          <h1
+            className="max-w-4xl font-serif text-4xl leading-tight text-white sm:text-6xl md:text-7xl"
+            style={{ textShadow: "0 2px 24px rgba(0,0,0,0.75)" }}
+          >
+            <span className="italic">Traditie</span> uit de{" "}
+            <span className="italic text-royal-gold">tandır</span>,<br />
+            vers van het <span className="italic text-royal-gold">vuur</span>.
+          </h1>
         </div>
-
-        {/* FIRE FLASH — the screen fills with fire as we enter the mouth */}
-        <div
-          ref={fireRef}
-          className="pointer-events-none absolute inset-0 z-20"
-          style={{
-            opacity: 0,
-            background:
-              "radial-gradient(circle at 50% 50%, rgba(255,214,150,0.95) 0%, rgba(255,140,42,0.92) 28%, rgba(255,77,31,0.9) 52%, rgba(58,16,5,0.95) 78%, rgba(13,10,8,1) 100%)",
-          }}
-          aria-hidden
-        />
-
-        {/* LANDING — settle from fire into the menu's dark charcoal */}
-        <div
-          ref={darkRef}
-          className="pointer-events-none absolute inset-0 z-30 bg-[#0d0a08]"
-          style={{ opacity: 0 }}
-          aria-hidden
-        />
       </div>
-    </section>
+
+      {/* Explosion canvas — draws only during the blast, above the hero layer */}
+      <canvas
+        ref={canvasRef}
+        className="pointer-events-none absolute inset-0 h-full w-full"
+        aria-hidden
+      />
+    </div>
   );
 }
-
-// ── Story panels: restaurant info revealed while the tandır spins ──────────
-
-type StoryPanelSpec = {
-  /** Scroll-progress center (0..1) where this panel is fully forward. */
-  center: number;
-  /** Half-width of visibility window in scroll progress. */
-  half: number;
-  eyebrow: string;
-  /** Rendered as JSX so we can italicise / colour key words. */
-  headline: React.ReactNode;
-  sub: string;
-};
-
-const STORY_PANELS: StoryPanelSpec[] = [
-  {
-    // Peak at page load so the tagline lands full-strength on first paint.
-    center: 0.0,
-    half: 0.1,
-    eyebrow: "Kral Durum · To Go",
-    headline: (
-      <>
-        <span className="italic">Traditie</span> uit de{" "}
-        <span className="italic text-royal-gold">tandır</span>,<br />
-        vers van het <span className="italic text-royal-gold">vuur</span>.
-      </>
-    ),
-    sub: "Houtskool gegrilde durum, verse lavash en huisgemaakte sauzen.",
-  },
-  {
-    center: 0.13,
-    half: 0.06,
-    eyebrow: "Het verhaal",
-    headline: (
-      <>
-        <span className="italic">Sinds 2018</span>
-        <br />
-        in Den Haag.
-      </>
-    ),
-    sub: "Elke spies op echte houtskool — geen kortere weg, alleen vlam.",
-  },
-  {
-    center: 0.25,
-    half: 0.06,
-    eyebrow: "Het ambacht",
-    headline: (
-      <>
-        Elke <span className="italic text-royal-gold">lavash</span>
-        <br />
-        met de <span className="italic">hand</span>.
-      </>
-    ),
-    sub: "Vers gebakken, elke ochtend. Zoals het thuis hoort.",
-  },
-  {
-    center: 0.37,
-    half: 0.06,
-    eyebrow: "In Den Haag",
-    headline: (
-      <>
-        <span className="italic">Tot je deur</span>,<br />
-        warm en op tijd.
-      </>
-    ),
-    sub: "€1,50 binnen 2 km · €2,50 binnen 5 km. Afhalen kan altijd.",
-  },
-  {
-    center: 0.48,
-    half: 0.06,
-    eyebrow: "★★★★★  ·  Google 5.0",
-    headline: (
-      <>
-        <span className="italic text-royal-gold">100K+</span>
-        <br />
-        blije klanten.
-      </>
-    ),
-    sub: "44 reviews. Elk bord komt met dezelfde vlam.",
-  },
-];
-
-// ── decorative helpers ─────────────────────────────────────────────────────
 
 function FireGlow() {
   return (

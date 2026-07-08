@@ -709,12 +709,25 @@ function CustomerSite() {
           </div>
         )}
 
-        {/* ── Cinematic scroll-scrub intro ── */}
+        {/* ── Autoplay tandır intro (explodes into the menu) ── */}
         <CinematicIntro />
 
-        {/* ── Menu + cart (fire-shard background) ── */}
+        {/* ── Menu + cart (ambient tandır-lit background) ── */}
         <section className="relative overflow-hidden bg-[#0d0a08]">
-          <EmberField />
+          {/* Soft, self-running fire flicker — as if lit by the tandır. Not
+              tied to the cursor; pure CSS, pauses under reduced-motion. */}
+          <div
+            className="kd-flicker pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(120% 70% at 50% 108%, rgba(255,110,40,0.22), transparent 60%), radial-gradient(90% 50% at 18% 100%, rgba(255,150,60,0.12), transparent 55%), radial-gradient(90% 50% at 82% 100%, rgba(255,90,30,0.12), transparent 55%)",
+            }}
+            aria-hidden
+          />
+          {/* Slowly drifting embers (self-running canvas, low opacity) */}
+          <div className="pointer-events-none absolute inset-0 opacity-70">
+            <EmberField />
+          </div>
           {/* Readability veil so cards + text always contrast the embers */}
           <div
             className="pointer-events-none absolute inset-0"
